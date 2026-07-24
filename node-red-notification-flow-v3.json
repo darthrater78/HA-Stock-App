@@ -1,0 +1,426 @@
+[
+  {
+    "id": "ha_stock_v3_tab",
+    "type": "tab",
+    "label": "HA Stock App Notifications",
+    "disabled": false,
+    "info": "Listens for ha_stock_app_* events from the HA Stock App integration and\nsends formatted notifications to notify.mobile_app_owner.\n\nFormatting reproduces the original node-red-portfolio-flow-v2 engine.\nThe integration now does the polling, market-hours gating, holiday\ncalendar and threshold logic, so this flow only formats and delivers.\n\nSetup: change the action on the 'Mobile Notify' node if your device is\nnot notify.mobile_app_owner. Test it with the integration's own\n'Send Test Notification' button after picking a type from the\n'Test Notification Type' dropdown."
+  },
+  {
+    "id": "n_ev_price",
+    "type": "server-events",
+    "z": "ha_stock_v3_tab",
+    "name": "Price Alert Event",
+    "server": "97b53801.46be48",
+    "version": 2,
+    "event_type": "ha_stock_app_price_alert",
+    "exposeAsEntityConfig": "",
+    "waitForRunning": true,
+    "outputProperties": [
+      {
+        "property": "payload",
+        "propertyType": "msg",
+        "value": "",
+        "valueType": "eventData"
+      }
+    ],
+    "x": 170,
+    "y": 100,
+    "wires": [
+      [
+        "n_fmt_price"
+      ]
+    ]
+  },
+  {
+    "id": "n_fmt_price",
+    "type": "function",
+    "z": "ha_stock_v3_tab",
+    "name": "Format Price Alert",
+    "func": "// Event data from the HA websocket node. Tolerates both payload shapes.\nconst d = (msg.payload && msg.payload.event) ? msg.payload.event : (msg.payload || {});\nconst TEST = d.test === true;\n\n// v2 parity: icon/sign/channel/colour, and the \"Level crossed\" figure, which v2\n// derived as sign * floor(|pct| / 1.0) * 1.0 with a 1% threshold.\nconst sym   = d.symbol;\nconst price = Number(d.price);\nconst pct   = Number(d.change_pct);\nconst icon  = pct >= 0 ? '\\u{1F7E2}' : '\\u{1F534}';\nconst sign  = pct >= 0 ? '+' : '';\nconst level = (pct >= 0 ? 1 : -1) * Math.floor(Math.abs(pct) / 1.0) * 1.0;\nconst label = sym === 'VOO' ? 'VOO (S&P 500)' : sym;\n\nmsg.payload = {\n    title:   `${icon} ${label} ${sign}${pct.toFixed(2)}% today`,\n    message: `${sym} at $${price.toFixed(2)} \\u2014 ${sign}${pct.toFixed(2)}% vs prev close. Level crossed: ${sign}${level}%`,\n    color:   pct >= 0 ? 'green' : 'red',\n    channel: pct <= -2 ? 'stock_alert' : 'Stocks',\n    test:    TEST,\n    // v2 alerted once per whole-percent level and no more than hourly.\n    dedupKey: `price:${sym}:${level}`,\n    cooldownMs: 60 * 60 * 1000\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 470,
+    "y": 100,
+    "wires": [
+      [
+        "n_gate"
+      ]
+    ]
+  },
+  {
+    "id": "n_ev_eod",
+    "type": "server-events",
+    "z": "ha_stock_v3_tab",
+    "name": "EOD Summary Event",
+    "server": "97b53801.46be48",
+    "version": 2,
+    "event_type": "ha_stock_app_eod_summary",
+    "exposeAsEntityConfig": "",
+    "waitForRunning": true,
+    "outputProperties": [
+      {
+        "property": "payload",
+        "propertyType": "msg",
+        "value": "",
+        "valueType": "eventData"
+      }
+    ],
+    "x": 170,
+    "y": 180,
+    "wires": [
+      [
+        "n_fmt_eod"
+      ]
+    ]
+  },
+  {
+    "id": "n_fmt_eod",
+    "type": "function",
+    "z": "ha_stock_v3_tab",
+    "name": "Format EOD Summary",
+    "func": "// Event data from the HA websocket node. Tolerates both payload shapes.\nconst d = (msg.payload && msg.payload.event) ? msg.payload.event : (msg.payload || {});\nconst TEST = d.test === true;\n\n// v2 parity: per-line \"icon LABEL  $price  +pct%  |  $held  (+$day)\", then a\n// total line. v2 read holdings from Monarch sensors; the integration now ships\n// position_value/day_pl in the event itself.\nconst stocks = d.stocks || {};\nconst syms = Object.keys(stocks);\nif (!syms.length) return null;\n\nfunction fmtMoney(val) {\n    if (val == null || isNaN(val)) return null;\n    return '$' + Math.abs(Math.round(val)).toLocaleString('en-US');\n}\n\nlet totalHeld = 0, totalDay = 0, haveHeld = false;\nconst lines = syms.map(sym => {\n    const s = stocks[sym];\n    const price = Number(s.price), pct = Number(s.change_pct);\n    if (isNaN(price) || isNaN(pct)) return `${sym}: no data`;\n    const icon = pct >= 0 ? '\\u{1F7E2}' : '\\u{1F534}';\n    const pctSign = pct >= 0 ? '+' : '-';\n    let line = `${icon} ${sym}  $${price.toFixed(2)}  ${pctSign}${Math.abs(pct).toFixed(2)}%`;\n    if (s.position_value != null && s.day_pl != null) {\n        haveHeld = true;\n        totalHeld += Number(s.position_value);\n        totalDay  += Number(s.day_pl);\n        const dcSign = Number(s.day_pl) >= 0 ? '+' : '-';\n        line += `  |  ${fmtMoney(s.position_value)}  (${dcSign}${fmtMoney(s.day_pl)})`;\n    }\n    return line;\n});\n\n// v2 badged the summary off the S&P proxy; fall back to the first symbol.\nconst lead = stocks['VOO'] || stocks[syms[0]];\nconst leadPct = lead ? Number(lead.change_pct) : null;\nlet badge = '\\u{1F4CA}';\nif (leadPct != null && !isNaN(leadPct)) {\n    if      (leadPct >= 1)  badge = '\\u{1F7E2}';\n    else if (leadPct >= 0)  badge = '\\u{1F7E1}';\n    else if (leadPct >= -1) badge = '\\u{1F7E0}';\n    else                    badge = '\\u{1F534}';\n}\n// Handed to the 401k formatter, which fires minutes later and wants this figure.\nif (leadPct != null && !isNaN(leadPct)) flow.set('lead_pct', leadPct);\n\nconst parts = lines.slice();\nif (haveHeld) {\n    const sign = totalDay >= 0 ? '+' : '-';\n    parts.push('', `\\u{1F4BC} Total: ${fmtMoney(totalHeld)}  |  Day: ${sign}${fmtMoney(totalDay)}`);\n}\n\nmsg.payload = {\n    title:   `${badge} Market Closed \\u2014 Daily Summary`,\n    message: parts.join('\\n'),\n    color:   (leadPct != null && leadPct >= 0) ? 'green' : 'red',\n    channel: 'Stocks',\n    test:    TEST\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 470,
+    "y": 180,
+    "wires": [
+      [
+        "n_gate"
+      ]
+    ]
+  },
+  {
+    "id": "n_ev_open",
+    "type": "server-events",
+    "z": "ha_stock_v3_tab",
+    "name": "Market Open Event",
+    "server": "97b53801.46be48",
+    "version": 2,
+    "event_type": "ha_stock_app_market_open",
+    "exposeAsEntityConfig": "",
+    "waitForRunning": true,
+    "outputProperties": [
+      {
+        "property": "payload",
+        "propertyType": "msg",
+        "value": "",
+        "valueType": "eventData"
+      }
+    ],
+    "x": 170,
+    "y": 260,
+    "wires": [
+      [
+        "n_fmt_open"
+      ]
+    ]
+  },
+  {
+    "id": "n_fmt_open",
+    "type": "function",
+    "z": "ha_stock_v3_tab",
+    "name": "Format Market Open",
+    "func": "// Event data from the HA websocket node. Tolerates both payload shapes.\nconst d = (msg.payload && msg.payload.event) ? msg.payload.event : (msg.payload || {});\nconst TEST = d.test === true;\n\n// v2 wording, verbatim. The early-close line is additive: v2 had no equivalent\n// because the integration did not yet publish close_time.\nlet message = 'NYSE is now open. Portfolio tracking begins.';\nif (d.early_close) message += `\\nEarly close today at ${d.close_time} ET.`;\n\nmsg.payload = {\n    title:   '\\u{1F514} Market Open',\n    message: message,\n    color:   'green',\n    channel: 'Stocks',\n    test:    TEST\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 470,
+    "y": 260,
+    "wires": [
+      [
+        "n_gate"
+      ]
+    ]
+  },
+  {
+    "id": "n_ev_k401",
+    "type": "server-events",
+    "z": "ha_stock_v3_tab",
+    "name": "401k Update Event",
+    "server": "97b53801.46be48",
+    "version": 2,
+    "event_type": "ha_stock_app_eod2_summary",
+    "exposeAsEntityConfig": "",
+    "waitForRunning": true,
+    "outputProperties": [
+      {
+        "property": "payload",
+        "propertyType": "msg",
+        "value": "",
+        "valueType": "eventData"
+      }
+    ],
+    "x": 170,
+    "y": 340,
+    "wires": [
+      [
+        "n_fmt_k401"
+      ]
+    ]
+  },
+  {
+    "id": "n_fmt_k401",
+    "type": "function",
+    "z": "ha_stock_v3_tab",
+    "name": "Format 401k Update",
+    "func": "// Event data from the HA websocket node. Tolerates both payload shapes.\nconst d = (msg.payload && msg.payload.event) ? msg.payload.event : (msg.payload || {});\nconst TEST = d.test === true;\n\n// v2 parity: \"old \\u2192 new / P/L: \\u00b1$x (\\u00b1y%) / S&P 500 was z% today\".\nfunction fmtMoney(val) {\n    if (val == null || isNaN(val)) return 'unavailable';\n    return '$' + Math.abs(Math.round(val)).toLocaleString('en-US');\n}\n\nconst oldVal = Number(d.previous_value);\nconst newVal = Number(d.new_value);\nconst pl     = Number(d.day_change);\nconst plPct  = Number(d.day_change_pct);\n\nconst leadPct = flow.get('lead_pct');\nconst badge = (leadPct != null && !isNaN(leadPct)) ? (leadPct >= 0 ? '\\u{1F7E2}' : '\\u{1F534}') : '\\u{1F4CA}';\nconst leadStr = (leadPct != null && !isNaN(leadPct))\n    ? `${leadPct >= 0 ? '+' : ''}${Number(leadPct).toFixed(2)}%` : 'unavailable';\n\nconst havePL = !isNaN(pl);\nconst plSign = havePL ? (pl >= 0 ? '+' : '-') : '';\nconst plPctStr = !isNaN(plPct) ? ` (${plSign}${Math.abs(plPct).toFixed(2)}%)` : '';\nconst plStr = havePL ? `${plSign}${fmtMoney(pl)}${plPctStr}` : 'unavailable';\n\nconst lead = !isNaN(oldVal) ? fmtMoney(oldVal) : fmtMoney(newVal);\nconst changeStr = (!isNaN(oldVal) && !isNaN(newVal)) ? ` \\u2192 ${fmtMoney(newVal)}` : '';\n\nlet message = `${lead}${changeStr}\\nP/L: ${plStr}\\nS&P 500 was ${leadStr} today`;\nif (d.deferred) message += '\\n(held from overnight)';\n\nmsg.payload = {\n    title:   `${badge} 401k Updated`,\n    message: message,\n    color:   havePL ? (pl >= 0 ? 'green' : 'red') : 'red',\n    channel: 'Stocks',\n    test:    TEST\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 470,
+    "y": 340,
+    "wires": [
+      [
+        "n_gate"
+      ]
+    ]
+  },
+  {
+    "id": "n_ev_paycheck",
+    "type": "server-events",
+    "z": "ha_stock_v3_tab",
+    "name": "Paycheck Detected Event",
+    "server": "97b53801.46be48",
+    "version": 2,
+    "event_type": "ha_stock_app_paycheck_detected",
+    "exposeAsEntityConfig": "",
+    "waitForRunning": true,
+    "outputProperties": [
+      {
+        "property": "payload",
+        "propertyType": "msg",
+        "value": "",
+        "valueType": "eventData"
+      }
+    ],
+    "x": 170,
+    "y": 420,
+    "wires": [
+      [
+        "n_fmt_paycheck"
+      ]
+    ]
+  },
+  {
+    "id": "n_fmt_paycheck",
+    "type": "function",
+    "z": "ha_stock_v3_tab",
+    "name": "Format Paycheck",
+    "func": "// Event data from the HA websocket node. Tolerates both payload shapes.\nconst d = (msg.payload && msg.payload.event) ? msg.payload.event : (msg.payload || {});\nconst TEST = d.test === true;\n\n// v2 parity, including the exact window wording.\nconst fmt = n => '$' + Math.round(n).toLocaleString('en-US');\nconst inWindow = d.in_pay_window === true;\nconst windowText = inWindow ? ' \\u2014 lines up with payday' : ' \\u2014 outside normal pay window';\n\nmsg.payload = {\n    title:   inWindow ? '\\u{1F4B0} Likely Paycheck' : '\\u{1F4B5} Large Cash Increase',\n    message: 'Estimated paycheck: ' + fmt(Number(d.amount)) + windowText,\n    color:   '#2E7D32',\n    channel: 'Network Restored',\n    test:    TEST\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 470,
+    "y": 420,
+    "wires": [
+      [
+        "n_gate"
+      ]
+    ]
+  },
+  {
+    "id": "n_ev_monarch",
+    "type": "server-events",
+    "z": "ha_stock_v3_tab",
+    "name": "Monarch Status Event",
+    "server": "97b53801.46be48",
+    "version": 2,
+    "event_type": "ha_stock_app_monarch_status",
+    "exposeAsEntityConfig": "",
+    "waitForRunning": true,
+    "outputProperties": [
+      {
+        "property": "payload",
+        "propertyType": "msg",
+        "value": "",
+        "valueType": "eventData"
+      }
+    ],
+    "x": 170,
+    "y": 500,
+    "wires": [
+      [
+        "n_fmt_monarch"
+      ]
+    ]
+  },
+  {
+    "id": "n_fmt_monarch",
+    "type": "function",
+    "z": "ha_stock_v3_tab",
+    "name": "Format Monarch Status",
+    "func": "// Event data from the HA websocket node. Tolerates both payload shapes.\nconst d = (msg.payload && msg.payload.event) ? msg.payload.event : (msg.payload || {});\nconst TEST = d.test === true;\n\n// v2 watchdog wording. The integration decides the transition, so the flow no\n// longer has to debounce unavailable/unknown states itself.\nif (d.status === 'online') {\n    msg.payload = {\n        title:   '\\u2705 Monarch Integration Restored',\n        message: 'Monarch sensors are reporting again. Holdings and the P&L sensor are back.',\n        color:   '#2E7D32',\n        channel: 'Flow Errors'\n    };\n} else {\n    msg.payload = {\n        title:   '\\u26A0\\uFE0F Monarch Integration Down',\n        message: 'Monarch sensors are unavailable \\u2014 portfolio holdings and the P&L sensor will read $0 until it reconnects. Reload the integration (Settings \\u2192 Devices & Services \\u2192 Reload) or re-authenticate.',\n        color:   '#D32F2F',\n        channel: 'Flow Errors'\n    };\n}\nmsg.payload.test = TEST;\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 470,
+    "y": 500,
+    "wires": [
+      [
+        "n_gate"
+      ]
+    ]
+  },
+  {
+    "id": "n_ev_fherr",
+    "type": "server-events",
+    "z": "ha_stock_v3_tab",
+    "name": "Finnhub Error Event",
+    "server": "97b53801.46be48",
+    "version": 2,
+    "event_type": "ha_stock_app_finnhub_error",
+    "exposeAsEntityConfig": "",
+    "waitForRunning": true,
+    "outputProperties": [
+      {
+        "property": "payload",
+        "propertyType": "msg",
+        "value": "",
+        "valueType": "eventData"
+      }
+    ],
+    "x": 170,
+    "y": 580,
+    "wires": [
+      [
+        "n_fmt_fherr"
+      ]
+    ]
+  },
+  {
+    "id": "n_fmt_fherr",
+    "type": "function",
+    "z": "ha_stock_v3_tab",
+    "name": "Format Finnhub Error",
+    "func": "// Event data from the HA websocket node. Tolerates both payload shapes.\nconst d = (msg.payload && msg.payload.event) ? msg.payload.event : (msg.payload || {});\nconst TEST = d.test === true;\n\n// v2 raised node.error here and the catch-all formatted it; the integration\n// publishes the failure directly, so it is formatted in place. The 2h dedup is\n// carried over from v2's \"Error Dedup + Format\".\nmsg.payload = {\n    title:   '\\u26A0\\uFE0F Finnhub Self-Test Failed',\n    message: `Self-test failed for ${d.symbol}: ${d.error}\\nQuotes may be broken today.`,\n    color:   '#D32F2F',\n    channel: 'Flow Errors',\n    test:    TEST,\n    dedupKey: 'finnhub_error',\n    cooldownMs: 2 * 60 * 60 * 1000\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 470,
+    "y": 580,
+    "wires": [
+      [
+        "n_gate"
+      ]
+    ]
+  },
+  {
+    "id": "n_ev_fhok",
+    "type": "server-events",
+    "z": "ha_stock_v3_tab",
+    "name": "Finnhub OK Event",
+    "server": "97b53801.46be48",
+    "version": 2,
+    "event_type": "ha_stock_app_finnhub_ok",
+    "exposeAsEntityConfig": "",
+    "waitForRunning": true,
+    "outputProperties": [
+      {
+        "property": "payload",
+        "propertyType": "msg",
+        "value": "",
+        "valueType": "eventData"
+      }
+    ],
+    "x": 170,
+    "y": 660,
+    "wires": [
+      [
+        "n_fmt_fhok"
+      ]
+    ]
+  },
+  {
+    "id": "n_fmt_fhok",
+    "type": "function",
+    "z": "ha_stock_v3_tab",
+    "name": "Format Finnhub OK",
+    "func": "// Event data from the HA websocket node. Tolerates both payload shapes.\nconst d = (msg.payload && msg.payload.event) ? msg.payload.event : (msg.payload || {});\nconst TEST = d.test === true;\n\n// v2 only notified on a *manual* self-test; a passing scheduled test was silent.\n// Same here: stay quiet unless this was fired from the integration's test button.\nif (!TEST) return null;\n\nmsg.payload = {\n    title:   '\\u2705 Finnhub API OK',\n    message: `HTTP 200 - ${d.symbol} $${Number(d.price).toFixed(2)}`,\n    color:   '#2E7D32',\n    channel: 'Flow Errors',\n    test:    TEST\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 470,
+    "y": 660,
+    "wires": [
+      [
+        "n_gate"
+      ]
+    ]
+  },
+  {
+    "id": "n_gate",
+    "type": "function",
+    "z": "ha_stock_v3_tab",
+    "name": "Test Tag + Repeat Suppression",
+    "func": "// Single exit gate: applies v2's test tag and its 2h/1h repeat suppression.\n//\n// v2's dedup function returned null on BOTH branches, so alerts that passed the\n// check were dropped too. This returns msg on the pass path.\nconst p = msg.payload;\nif (!p) return null;\n\nif (p.test) p.title = '\\u{1F9EA} TEST: ' + p.title;\n\nif (p.dedupKey) {\n    const now = Date.now();\n    const window = p.cooldownMs || 2 * 60 * 60 * 1000;\n    const seen = flow.get('alert_seen') || {};\n    for (const k of Object.keys(seen)) {\n        if (now - seen[k] > 24 * 3600 * 1000) delete seen[k];\n    }\n    if (!p.test && seen[p.dedupKey] && now - seen[p.dedupKey] < window) {\n        flow.set('alert_seen', seen);\n        node.status({fill: 'grey', shape: 'ring', text: 'suppressed ' + p.dedupKey});\n        return null;\n    }\n    seen[p.dedupKey] = now;\n    flow.set('alert_seen', seen);\n}\n\ndelete p.dedupKey;\ndelete p.cooldownMs;\nnode.status({fill: 'green', shape: 'dot', text: p.title.slice(0, 28)});\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 790,
+    "y": 380,
+    "wires": [
+      [
+        "n_notify"
+      ]
+    ]
+  },
+  {
+    "id": "n_notify",
+    "type": "api-call-service",
+    "z": "ha_stock_v3_tab",
+    "name": "Mobile Notify — Owner",
+    "server": "97b53801.46be48",
+    "version": 7,
+    "debugenabled": false,
+    "action": "notify.mobile_app_owner",
+    "floorId": [],
+    "areaId": [],
+    "deviceId": [],
+    "entityId": [],
+    "labelId": [],
+    "data": "{\n    \"title\": payload.title,\n    \"message\": payload.message,\n    \"data\": {\n        \"color\": payload.color,\n        \"channel\": payload.channel,\n        \"priority\": \"high\",\n        \"ttl\": 0\n    }\n}",
+    "dataType": "jsonata",
+    "mergeContext": "",
+    "mustacheAltTags": false,
+    "outputProperties": [],
+    "queue": "none",
+    "blockInputOverrides": false,
+    "domain": "notify",
+    "service": "mobile_app_owner",
+    "x": 1060,
+    "y": 380,
+    "wires": [
+      []
+    ]
+  }
+]

@@ -19,6 +19,14 @@ A Home Assistant custom integration (HACS) for tracking stock prices and, option
 
 All events are fired on the HA event bus (`ha_stock_app_*`) for use with Node-RED or automations to deliver mobile notifications.
 
+### Node-RED notifications
+
+`node-red-notification-flow-v3.json` is an importable flow that listens for the integration's events and sends formatted notifications to your phone. The message formatting reproduces the original `node-red-portfolio-flow-v2` engine, so alerts look the same as they did before the integration took over the polling.
+
+After importing, change the action on the **Mobile Notify** node if your device isn't `notify.mobile_app_owner`. Test it with the integration's own **Send Test Notification** button after picking a type from the **Test Notification Type** dropdown — test events are tagged 🧪 and bypass repeat suppression.
+
+The older `node-red-*.json` and `monarch-*.json` files in this repo are the superseded standalone engine, kept for reference only.
+
 ## Installation
 
 Install via HACS as a custom repository, or copy `custom_components/ha_stock_app` into your Home Assistant `config/custom_components/` directory and restart.
