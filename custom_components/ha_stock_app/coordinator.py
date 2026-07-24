@@ -5,7 +5,11 @@ from datetime import timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import (
+    DataUpdateCoordinator,
+    TimestampDataUpdateCoordinator,
+    UpdateFailed,
+)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_call_later
 
@@ -48,7 +52,7 @@ def _strip_sensitive(config: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in config.items() if k not in SENSITIVE_KEYS}
 
 
-class StockCoordinator(DataUpdateCoordinator):
+class StockCoordinator(TimestampDataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, config: dict[str, Any]) -> None:
         self._config = _strip_sensitive(config)
         self._provider = get_provider(

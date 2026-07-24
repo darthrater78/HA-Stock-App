@@ -35,6 +35,12 @@ Configuration is entirely through the HA UI:
 
 ## Version History
 
+### v2.2.4 — 2026-07-24
+- Fixed 401k quiet hours ignoring the minute component and misfiring for windows that don't cross midnight — an update landing at 08:15 with a quiet end of 08:35 was released 20 minutes early, and a same-day window like 16:00–20:00 marked almost the whole day as quiet
+- Fixed the Last Stock Poll sensor raising `AttributeError`: `last_update_success_time` is only provided by `TimestampDataUpdateCoordinator`, which `StockCoordinator` now extends
+- Fixed the setup wizard aborting with an unknown-error screen when the stock API test timed out — timeouts now route to the existing retry step
+- Added a 15-second timeout to Finnhub requests (previously the aiohttp default of 5 minutes)
+
 ### v2.2.3 — 2026-07-24
 - Added logbook platform — integration events (stock polls, price alerts, EOD summaries, paycheck detection, etc.) now appear in the device Activity tab
 - Fires a `ha_stock_app_stock_update` event on every successful poll for logbook and automation use

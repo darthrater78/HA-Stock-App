@@ -270,6 +270,19 @@ def _parse_time(t: str) -> dt_time:
     return dt_time(int(parts[0]), int(parts[1]))
 
 
+def _in_quiet_hours(now: dt_time, start: dt_time, end: dt_time) -> bool:
+    """Return True if now falls inside the quiet window.
+
+    The window wraps past midnight when start > end, which the default
+    22:00 -> 08:35 does. Compares full times so the minute component counts.
+    """
+    if start == end:
+        return False
+    if start < end:
+        return start <= now < end
+    return now >= start or now < end
+
+
 class ScheduledFeatures:
     def __init__(
         self,
@@ -466,7 +479,7 @@ class ScheduledFeatures:
             now = et_now(self.hass)
             quiet_start = _parse_time(self._opt(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START))
             quiet_end = _parse_time(self._opt(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END))
-            in_quiet = now.hour >= quiet_start.hour or now.hour < quiet_end.hour
+            in_quiet = _in_quiet_hours(now.time(), quiet_start, quiet_end)
 
             event_data = {
                 "sensor": sensor_id,

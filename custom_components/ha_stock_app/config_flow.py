@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -55,6 +57,8 @@ from .const import (
     PROVIDERS,
 )
 from .providers import get_provider, validate_symbols
+
+_LOGGER = logging.getLogger(__name__)
 
 POLL_OPTIONS = {
     "60": "1 minute",
@@ -130,7 +134,13 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         test_symbol = self._data[CONF_STOCKS][0]
-        quote = await provider.get_quote(test_symbol)
+        try:
+            quote = await provider.get_quote(test_symbol)
+        except Exception:
+            # Any failure here must land on the retry step rather than
+            # aborting the flow with an unhandled-error screen.
+            _LOGGER.exception("Stock API test failed for %s", test_symbol)
+            quote = None
 
         if quote is None:
             return self.async_show_form(
