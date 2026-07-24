@@ -6,6 +6,7 @@ A Home Assistant custom integration (HACS) for tracking stock prices and, option
 
 - **Stock tracking** — add/remove tickers from the HA UI, pluggable price provider (Finnhub by default), configurable poll frequency
 - **Market-hours aware** — full NYSE holiday calendar (with early closes) gates polling and scheduled events, computed locally with no external dependency
+- **Timezone-correct scheduling** — a configurable market timezone (Eastern by default) drives every scheduled event, so they fire at the right moment whatever Home Assistant's own timezone is, and stay correct across DST
 - **Price alerts** — event fired when a symbol moves past a configurable threshold
 - **End-of-day summary** — fired at market close, including per-position P/L when Monarch is connected
 - **Monarch Money (optional)** — account balances, individual stock holdings within investment/brokerage/IRA accounts, paycheck detection, and a double-refresh workaround for a known Monarch API race condition. Selectable accounts let you import only what you need. Uses the unofficial [monarchmoney](https://github.com/hammem/monarchmoney) package; not affiliated with or endorsed by Monarch Money
@@ -14,6 +15,8 @@ A Home Assistant custom integration (HACS) for tracking stock prices and, option
 - **Manual refresh buttons** — button entities to trigger stock and Monarch data refreshes on demand
 - **Test notifications** — select a notification type from a dropdown and fire a test event, all from within the integration (no Developer Tools needed)
 - **Debug logging** — toggle verbose logging on/off from the options flow
+- **Diagnostics** — Market Status and Last Stock Poll sensors show at a glance whether the market is open and when prices last updated
+- **Logbook integration** — polls, price alerts, summaries and paycheck detection appear in the device's Activity tab
 - **Device grouping** — all entities are grouped under a single HA Stock App device with proper `SensorDeviceClass.MONETARY` for currency display
 - Every feature above is independently toggleable through the config/options flow
 
@@ -38,7 +41,17 @@ Configuration is entirely through the HA UI:
 2. Enter your stock provider API key and ticker symbols
 3. Optionally enable Monarch Money and provide credentials (with TOTP secret if MFA is enabled)
 4. Select which Monarch accounts to import (all selected by default)
-5. Fine-tune feature toggles (market hours gating, EOD summary, 401k reporting, paycheck detection, debug logging, etc.) via the integration's **Configure** options
+5. Fine-tune feature toggles (market hours gating, market timezone, EOD summary, 401k reporting, paycheck detection, debug logging, etc.) via the integration's **Configure** options
+
+## Development
+
+The market calendar, timezone handling, schedule resolution and quiet-hours logic
+are covered by tests that need no dependencies — `market.py` deliberately keeps
+Home Assistant out of its module scope:
+
+```bash
+python3 -m unittest discover tests
+```
 
 ## Version History
 
