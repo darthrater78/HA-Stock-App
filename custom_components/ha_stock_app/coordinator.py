@@ -34,9 +34,11 @@ from .const import (
     EVENT_PAYCHECK_DETECTED,
     EVENT_MONARCH_STATUS,
 )
+from .const import CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE
 from .providers import get_provider, StockQuote
 from .monarch import MonarchHolding
 from .market import et_now, in_pay_window, parse_pay_windows
+from .notify import async_send_notification
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,6 +63,7 @@ class StockCoordinator(DataUpdateCoordinator):
         self._market_hours_enabled = config.get(
             CONF_ENABLE_MARKET_HOURS, DEFAULT_ENABLE_MARKET_HOURS
         )
+        self._notify_service = config.get(CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE)
 
         super().__init__(
             hass,
@@ -96,16 +99,18 @@ class StockCoordinator(DataUpdateCoordinator):
             if prev is not None and prev > 0:
                 pct = abs((quote.current_price - prev) / prev) * 100
                 if pct >= self._alert_threshold:
-                    self.hass.bus.async_fire(
-                        EVENT_PRICE_ALERT,
-                        {
-                            "symbol": symbol,
-                            "price": quote.current_price,
-                            "previous": prev,
-                            "change_pct": round(quote.change_percent, 2),
-                            "direction": "up" if quote.current_price > prev else "down",
-                        },
-                    )
+                    alert_data = {
+                        "symbol": symbol,
+                        "price": quote.current_price,
+                        "previous": prev,
+                        "change_pct": round(quote.change_percent, 2),
+                        "direction": "up" if quote.current_price > prev else "down",
+                    }
+                    self.hass.bus.async_fire(EVENT_PRICE_ALERT, alert_data)
+                    if self._notify_service:
+                        await async_send_notification(
+                            self.hass, self._notify_service, EVENT_PRICE_ALERT, alert_data
+                        )
             self._previous_prices[symbol] = quote.current_price
 
         return quotes
@@ -137,6 +142,7 @@ class MonarchCoordinator(DataUpdateCoordinator):
         self._pay_windows = parse_pay_windows(
             config.get(CONF_PAYCHECK_WINDOWS, DEFAULT_PAYCHECK_WINDOWS)
         )
+        self._notify_service = config.get(CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE)
 
         super().__init__(
             hass,
@@ -162,10 +168,12 @@ class MonarchCoordinator(DataUpdateCoordinator):
 
         is_available = len(accounts) > 0
         if is_available != self._was_available:
-            self.hass.bus.async_fire(
-                EVENT_MONARCH_STATUS,
-                {"status": "online" if is_available else "offline"},
-            )
+            status_data = {"status": "online" if is_available else "offline"}
+            self.hass.bus.async_fire(EVENT_MONARCH_STATUS, status_data)
+            if self._notify_service:
+                await async_send_notification(
+                    self.hass, self._notify_service, EVENT_MONARCH_STATUS, status_data
+                )
             self._was_available = is_available
 
         if not accounts:
@@ -216,14 +224,16 @@ class MonarchCoordinator(DataUpdateCoordinator):
                 delta = total_cash - self._previous_cash
                 if delta >= self._paycheck_threshold:
                     day = et_now(self.hass).day
-                    self.hass.bus.async_fire(
-                        EVENT_PAYCHECK_DETECTED,
-                        {
-                            "amount": round(delta, 2),
-                            "new_balance": round(total_cash, 2),
-                            "in_pay_window": in_pay_window(day, self._pay_windows),
-                        },
-                    )
+                    paycheck_data = {
+                        "amount": round(delta, 2),
+                        "new_balance": round(total_cash, 2),
+                        "in_pay_window": in_pay_window(day, self._pay_windows),
+                    }
+                    self.hass.bus.async_fire(EVENT_PAYCHECK_DETECTED, paycheck_data)
+                    if self._notify_service:
+                        await async_send_notification(
+                            self.hass, self._notify_service, EVENT_PAYCHECK_DETECTED, paycheck_data
+                        )
             self._previous_cash = total_cash
 
         return result
