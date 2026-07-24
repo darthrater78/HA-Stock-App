@@ -43,6 +43,8 @@ Configuration is entirely through the HA UI:
 ## Version History
 
 ### v2.3.0 — 2026-07-24
+- Fixed a typo in the quiet-hours or pay-window fields stopping the integration from loading. Both are free-form text; they now reject bad input in the form with an explanatory error, and fall back to the default at runtime instead of raising during setup. Pay-window days are range-checked too, so a value like `99-200` no longer parses cleanly while silently never matching
+- Fixed the Monarch double-refresh timer not being cancelled on unload, which left it to fire into a torn-down coordinator
 - Removed the superseded standalone Node-RED engine (`node-red-portfolio-flow-v2.json` and its add-ons). The integration has done that work since v2.0.0; the flows remain in git history
 - Added `examples/node-red-notifications.json`, an optional Node-RED flow that turns the integration's events into mobile notifications, formatted to match the engine it replaced
 - Added a test suite covering the market calendar, timezone handling, scheduling and quiet hours. It has no dependencies — run `python3 -m unittest discover tests`

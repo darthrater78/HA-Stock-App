@@ -206,6 +206,27 @@ class TestQuietHours(unittest.TestCase):
         self.assertFalse(market.in_quiet_hours(self._t("12:00"), self._t("09:00"), self._t("09:00")))
 
 
+class TestParseTimeOfDay(unittest.TestCase):
+    """The quiet-hours fields are free-form text in the options flow.
+
+    They previously reached a parser that raised during setup, so a typo
+    stopped the whole integration from loading.
+    """
+
+    def test_parses_valid_times(self):
+        self.assertEqual(market.parse_time_of_day("08:35", "22:00"), dt.time(8, 35))
+        self.assertEqual(market.parse_time_of_day("0:00", "22:00"), dt.time(0, 0))
+        self.assertEqual(market.parse_time_of_day("23:59", "22:00"), dt.time(23, 59))
+
+    def test_bad_input_falls_back_instead_of_raising(self):
+        for bad in ["22", "", "8:5pm", "25:00", "not a time", None, "08:60"]:
+            with self.subTest(value=bad):
+                self.assertEqual(market.parse_time_of_day(bad, "22:00"), dt.time(22, 0))
+
+    def test_unusable_default_still_returns_a_time(self):
+        self.assertEqual(market.parse_time_of_day("nonsense", "also nonsense"), dt.time(0, 0))
+
+
 class TestPayWindows(unittest.TestCase):
     def test_parses_the_documented_default(self):
         self.assertEqual(market.parse_pay_windows("27-5,11-19"), [(27, 5), (11, 19)])
@@ -213,6 +234,21 @@ class TestPayWindows(unittest.TestCase):
     def test_tolerates_whitespace_and_junk(self):
         self.assertEqual(market.parse_pay_windows(" 1-5 , 10-12 "), [(1, 5), (10, 12)])
         self.assertEqual(market.parse_pay_windows(""), [])
+
+    def test_malformed_segments_are_skipped_not_raised(self):
+        for bad in ["abc-def", "27-", "1-5-9", "27 to 5", None]:
+            with self.subTest(value=bad):
+                self.assertEqual(market.parse_pay_windows(bad), [])
+
+    def test_out_of_range_days_are_rejected(self):
+        # "99-200" parsed cleanly before but could never match a real date,
+        # silently disabling pay-window matching.
+        self.assertEqual(market.parse_pay_windows("99-200"), [])
+        self.assertEqual(market.parse_pay_windows("0-5"), [])
+        self.assertEqual(market.parse_pay_windows("1-31"), [(1, 31)])
+
+    def test_one_bad_segment_does_not_discard_the_others(self):
+        self.assertEqual(market.parse_pay_windows("27-5,oops,11-19"), [(27, 5), (11, 19)])
 
     def test_window_wrapping_month_end(self):
         windows = [(27, 5)]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 import voluptuous as vol
 
@@ -62,6 +63,15 @@ from .const import (
 from .providers import get_provider, validate_symbols
 
 _LOGGER = logging.getLogger(__name__)
+
+TIME_OF_DAY = re.compile(r"^([01]?\d|2[0-3]):[0-5]\d$")
+
+
+def _invalid_pay_windows(value: str) -> bool:
+    """Whether a pay-window string has no usable segment."""
+    from .market import parse_pay_windows
+
+    return bool(str(value or "").strip()) and not parse_pay_windows(value)
 
 POLL_OPTIONS = {
     "60": "1 minute",
@@ -433,7 +443,19 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_advanced(self, user_input=None):
+        errors = {}
         if user_input is not None:
+            # Both of these are free-form text. Reject a typo here rather than
+            # letting it reach the parsers, which fall back silently.
+            if self._options.get(CONF_ENABLE_401K_REPORTING, False):
+                for key in (CONF_401K_QUIET_START, CONF_401K_QUIET_END):
+                    if not TIME_OF_DAY.match(str(user_input.get(key, "")).strip()):
+                        errors[key] = "invalid_time"
+            if self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False):
+                if _invalid_pay_windows(user_input.get(CONF_PAYCHECK_WINDOWS, "")):
+                    errors[CONF_PAYCHECK_WINDOWS] = "invalid_pay_windows"
+
+        if user_input is not None and not errors:
             if self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False):
                 self._options[CONF_PAYCHECK_THRESHOLD] = user_input.get(
                     CONF_PAYCHECK_THRESHOLD, DEFAULT_PAYCHECK_THRESHOLD
@@ -475,4 +497,5 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="advanced",
             data_schema=vol.Schema(schema_dict),
+            errors=errors,
         )

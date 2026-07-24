@@ -97,6 +97,10 @@
           "401k_retry_interval": "401k Check Interval"
         }
       }
+    },
+    "error": {
+      "invalid_time": "Enter a time as HH:MM in 24-hour form, for example 08:35.",
+      "invalid_pay_windows": "Enter day ranges as day-day separated by commas, for example 27-5,11-19. Days must be 1-31."
     }
   },
   "issues": {

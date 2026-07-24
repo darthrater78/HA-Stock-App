@@ -64,13 +64,50 @@ def next_market_time(
     return now + timedelta(days=1)
 
 
+def parse_time_of_day(value: str, default: str = "00:00") -> time:
+    """Parse "HH:MM" from a free-form config field.
+
+    The options flow accepts these as plain text, so a typo must not be able to
+    take the integration down: an unparseable value falls back to the supplied
+    default with a warning rather than raising during setup.
+    """
+    for candidate, is_fallback in ((value, False), (default, True)):
+        parts = str(candidate or "").strip().split(":")
+        try:
+            return time(int(parts[0]), int(parts[1]))
+        except (IndexError, ValueError):
+            if not is_fallback:
+                _LOGGER.warning(
+                    "Invalid time of day %r; falling back to %r", value, default
+                )
+    return time(0, 0)
+
+
 def parse_pay_windows(windows_str: str) -> list[tuple[int, int]]:
-    result = []
-    for part in windows_str.split(","):
+    """Parse "27-5,11-19" into inclusive day-of-month ranges.
+
+    Also free-form, so a malformed segment is skipped with a warning rather
+    than raising. Days are range-checked too: "99-200" parsed cleanly before
+    but could never match a real date, silently disabling pay-window matching.
+    """
+    result: list[tuple[int, int]] = []
+    for part in str(windows_str or "").split(","):
         part = part.strip()
-        if "-" in part:
-            a, b = part.split("-", 1)
-            result.append((int(a.strip()), int(b.strip())))
+        if not part:
+            continue
+        bits = part.split("-")
+        if len(bits) != 2:
+            _LOGGER.warning("Ignoring malformed pay window %r", part)
+            continue
+        try:
+            start, end = int(bits[0].strip()), int(bits[1].strip())
+        except ValueError:
+            _LOGGER.warning("Ignoring malformed pay window %r", part)
+            continue
+        if not (1 <= start <= 31 and 1 <= end <= 31):
+            _LOGGER.warning("Ignoring out-of-range pay window %r", part)
+            continue
+        result.append((start, end))
     return result
 
 

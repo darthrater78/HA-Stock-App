@@ -187,7 +187,16 @@ class MonarchCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(minutes=poll_minutes),
         )
 
+    @callback
+    def async_cancel_pending(self) -> None:
+        """Cancel a deferred second refresh, if one is armed."""
+        if self._double_refresh_unsub is not None:
+            self._double_refresh_unsub()
+            self._double_refresh_unsub = None
+
     async def async_trigger_double_refresh(self) -> None:
+        # Re-arming without cancelling would orphan the previous timer.
+        self.async_cancel_pending()
         await self.async_request_refresh()
 
         @callback

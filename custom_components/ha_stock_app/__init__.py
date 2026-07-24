@@ -285,15 +285,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         scheduler = entry_data.get("scheduler")
         if scheduler:
             scheduler.cancel_all()
+        monarch_coordinator = entry_data.get("monarch_coordinator")
+        if monarch_coordinator:
+            # Otherwise a double refresh armed in the last four minutes fires
+            # into a coordinator that has already been torn down.
+            monarch_coordinator.async_cancel_pending()
         ir.async_delete_issue(hass, DOMAIN, f"monarch_auth_failed_{entry.entry_id}")
         if not hass.data[DOMAIN]:
             hass.services.async_remove(DOMAIN, "test_notification")
     return unload_ok
 
 
-def _parse_time(t: str) -> dt_time:
-    parts = t.split(":")
-    return dt_time(int(parts[0]), int(parts[1]))
 
 
 
@@ -365,6 +367,8 @@ class ScheduledFeatures:
         self._unsubs.append(_cancel)
 
     def register(self) -> None:
+        from .market import parse_time_of_day
+
         schedules: list[tuple[int, int, str, Any]] = [
             (9, 15, CONF_ENABLE_FINNHUB_SELF_TEST, self._finnhub_self_test),
             (9, 30, CONF_ENABLE_MARKET_OPEN_EVENT, self._market_open_notify),
@@ -385,8 +389,9 @@ class ScheduledFeatures:
 
         if self._opt(CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING):
             schedules.append((16, 5, CONF_ENABLE_401K_REPORTING, self._eod2_start_watch))
-            quiet_end = _parse_time(
-                self._opt(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END)
+            quiet_end = parse_time_of_day(
+                self._opt(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END),
+                DEFAULT_401K_QUIET_END,
             )
             schedules.append(
                 (quiet_end.hour, quiet_end.minute, CONF_ENABLE_401K_REPORTING, self._eod2_morning_release)
@@ -501,7 +506,7 @@ class ScheduledFeatures:
         await self._eod2_check_and_retry(retry_minutes)
 
     async def _eod2_check_and_retry(self, retry_minutes: int) -> None:
-        from .market import in_quiet_hours, market_now
+        from .market import in_quiet_hours, market_now, parse_time_of_day
 
         sensor_id = self._opt(CONF_401K_SENSOR, "")
         state = self.hass.states.get(sensor_id)
@@ -522,8 +527,14 @@ class ScheduledFeatures:
                 change_pct = 0
 
             now = market_now(self.hass, self._tz)
-            quiet_start = _parse_time(self._opt(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START))
-            quiet_end = _parse_time(self._opt(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END))
+            quiet_start = parse_time_of_day(
+                self._opt(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START),
+                DEFAULT_401K_QUIET_START,
+            )
+            quiet_end = parse_time_of_day(
+                self._opt(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END),
+                DEFAULT_401K_QUIET_END,
+            )
             in_quiet = in_quiet_hours(now.time(), quiet_start, quiet_end)
 
             event_data = {
