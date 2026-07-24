@@ -63,6 +63,7 @@ EVENT_MARKET_OPEN = f"{DOMAIN}_market_open"
 EVENT_EOD2_SUMMARY = f"{DOMAIN}_eod2_summary"
 EVENT_FINNHUB_ERROR = f"{DOMAIN}_finnhub_error"
 EVENT_FINNHUB_OK = f"{DOMAIN}_finnhub_ok"
+EVENT_STOCK_UPDATE = f"{DOMAIN}_stock_update"
 
 CONF_MONARCH_ACCOUNTS = "monarch_accounts"
 CONF_ENABLE_DEBUG_LOGGING = "enable_debug_logging"

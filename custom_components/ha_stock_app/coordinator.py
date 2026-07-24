@@ -31,6 +31,7 @@ from .const import (
     DEFAULT_PAYCHECK_THRESHOLD,
     DEFAULT_PAYCHECK_WINDOWS,
     EVENT_PRICE_ALERT,
+    EVENT_STOCK_UPDATE,
     EVENT_PAYCHECK_DETECTED,
     EVENT_MONARCH_STATUS,
 )
@@ -83,10 +84,11 @@ class StockCoordinator(DataUpdateCoordinator):
         return self._provider
 
     async def _async_update_data(self) -> dict[str, StockQuote]:
+        _LOGGER.info("Stock poll triggered (interval=%ds)", self._poll_seconds)
         if self._market_hours_enabled:
             from .market import NYSECalendar
             if not NYSECalendar.is_market_open(et_now(self.hass)):
-                _LOGGER.debug("Market closed — returning cached data")
+                _LOGGER.info("Market closed — returning cached data")
                 if self.data:
                     return self.data
 
@@ -95,7 +97,9 @@ class StockCoordinator(DataUpdateCoordinator):
         except Exception as exc:
             raise UpdateFailed("Stock data fetch failed") from exc
 
-        _LOGGER.info("Stock poll complete: %s", {s: f"${q.current_price:.2f}" for s, q in quotes.items()})
+        prices = {s: round(q.current_price, 2) for s, q in quotes.items()}
+        _LOGGER.info("Stock poll complete: %s", {s: f"${p:.2f}" for s, p in prices.items()})
+        self.hass.bus.async_fire(EVENT_STOCK_UPDATE, {"prices": prices})
 
         for symbol, quote in quotes.items():
             prev = self._previous_prices.get(symbol)
@@ -131,7 +135,7 @@ class MonarchCoordinator(DataUpdateCoordinator):
         self._previous_cash: float | None = None
         self._double_refresh_unsub = None
 
-        poll_minutes = config.get(CONF_MONARCH_POLL_INTERVAL, DEFAULT_MONARCH_POLL_INTERVAL)
+        poll_minutes = int(config.get(CONF_MONARCH_POLL_INTERVAL, DEFAULT_MONARCH_POLL_INTERVAL))
         self._paycheck_enabled = config.get(
             CONF_ENABLE_PAYCHECK_DETECTION, DEFAULT_ENABLE_PAYCHECK_DETECTION
         )
