@@ -439,7 +439,7 @@ class ScheduledFeatures:
             self._eod2_retry_unsub = None
 
         self._eod2_baseline = state.state
-        retry_minutes = self._opt(CONF_401K_RETRY_INTERVAL, DEFAULT_401K_RETRY_INTERVAL)
+        retry_minutes = int(self._opt(CONF_401K_RETRY_INTERVAL, DEFAULT_401K_RETRY_INTERVAL))
         await self._eod2_check_and_retry(retry_minutes)
 
     async def _eod2_check_and_retry(self, retry_minutes: int) -> None:

@@ -35,8 +35,11 @@ Configuration is entirely through the HA UI:
 
 ## Version History
 
-### v2.2.2 — 2026-07-24
-- Fixed poll frequency radio buttons not showing the saved selection: stored string values (e.g. `"300"`) didn't match integer dict keys (`300`) — now coerced to int on both read and write
+### v2.2.3 — 2026-07-24
+- Added logbook platform — integration events (stock polls, price alerts, EOD summaries, paycheck detection, etc.) now appear in the device Activity tab
+- Fires a `ha_stock_app_stock_update` event on every successful poll for logbook and automation use
+- Added poll-triggered and market-closed INFO-level log messages for better System Log visibility
+- Fixed poll frequency radio buttons not showing the saved selection: stored string values (e.g. `"300"`) didn't match integer dict keys (`300`) — now uses string keys throughout
 
 ### v2.2.1 — 2026-07-24
 - Reverted direct notification delivery (back to Node-RED for notifications)
