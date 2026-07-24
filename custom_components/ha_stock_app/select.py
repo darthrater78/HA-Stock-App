@@ -3,6 +3,7 @@ from __future__ import annotations
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
@@ -18,13 +19,13 @@ TEST_NOTIFICATION_OPTIONS = {
 }
 
 
-def _device_info(entry: ConfigEntry) -> dict:
-    return {
-        "identifiers": {(DOMAIN, entry.entry_id)},
-        "name": "HA Stock App",
-        "manufacturer": "HA Stock App",
-        "model": "Stock & Finance Tracker",
-    }
+def _device_info(entry: ConfigEntry) -> DeviceInfo:
+    return DeviceInfo(
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="HA Stock App",
+        manufacturer="HA Stock App",
+        model="Stock & Finance Tracker",
+    )
 
 
 async def async_setup_entry(

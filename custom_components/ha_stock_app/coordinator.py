@@ -184,10 +184,22 @@ class MonarchCoordinator(DataUpdateCoordinator):
         _SKIP_TYPES = {"depository", "credit", "loan"}
         all_holdings: dict[str, MonarchHolding] = {}
         for acct in accounts:
-            if acct.type_name in _SKIP_TYPES:
+            type_lower = (acct.type_name or "").lower()
+            if type_lower in _SKIP_TYPES:
+                _LOGGER.debug(
+                    "Skipping holdings for %s (%s) — type=%s",
+                    acct.name, acct.id, acct.type_name,
+                )
                 continue
+            _LOGGER.debug(
+                "Fetching holdings for %s (%s) — type=%s",
+                acct.name, acct.id, acct.type_name,
+            )
             acct_holdings = await self._client.get_holdings(
                 acct.id, acct.name
+            )
+            _LOGGER.debug(
+                "Got %d holdings for %s", len(acct_holdings), acct.name,
             )
             for h in acct_holdings:
                 all_holdings[h.id] = h

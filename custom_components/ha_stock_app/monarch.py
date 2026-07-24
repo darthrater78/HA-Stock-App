@@ -148,11 +148,21 @@ class MonarchClient:
                 acct_id = account_id
             data = await self._mm.get_account_holdings(acct_id)
             holdings: list[MonarchHolding] = []
-            edges = (
-                data.get("portfolio", {})
-                .get("aggregateHoldings", {})
-                .get("edges", [])
-            )
+            portfolio = data.get("portfolio")
+            if not portfolio:
+                _LOGGER.debug(
+                    "No portfolio key in holdings response for account %s. Keys: %s",
+                    account_id, list(data.keys()) if isinstance(data, dict) else type(data),
+                )
+                return []
+            agg = portfolio.get("aggregateHoldings")
+            if not agg:
+                _LOGGER.debug(
+                    "No aggregateHoldings in portfolio for account %s. Keys: %s",
+                    account_id, list(portfolio.keys()),
+                )
+                return []
+            edges = agg.get("edges", [])
             for edge in edges:
                 node = edge.get("node", {})
                 security = node.get("security") or {}
