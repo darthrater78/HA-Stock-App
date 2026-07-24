@@ -8,6 +8,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -50,9 +51,14 @@ async def async_setup_entry(
 
     async_add_entities(entities, update_before_add=True)
 
+    valid_unique_ids = {e.unique_id for e in entities}
+    ent_reg = er.async_get(hass)
+    for ent_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        if ent_entry.domain == "sensor" and ent_entry.unique_id not in valid_unique_ids:
+            ent_reg.async_remove(ent_entry.entity_id)
+
 
 class StockPriceSensor(CoordinatorEntity, SensorEntity):
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "USD"
     _attr_icon = "mdi:chart-line"
@@ -125,7 +131,6 @@ class MonarchAccountSensor(CoordinatorEntity, SensorEntity):
 
 
 class MonarchHoldingSensor(CoordinatorEntity, SensorEntity):
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "USD"
     _attr_icon = "mdi:chart-areaspline"
