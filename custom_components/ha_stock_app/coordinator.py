@@ -109,6 +109,21 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
         except Exception as exc:
             raise UpdateFailed("Stock data fetch failed") from exc
 
+        if self.stocks and not quotes:
+            # get_quote returns None rather than raising on an HTTP error, so a
+            # wholesale failure arrives here as an empty dict and is otherwise
+            # indistinguishable from success. Unflagged, a revoked API key would
+            # keep recording healthy polls -- fresh Last Stock Poll timestamp,
+            # no prices, and no failure surfaced anywhere.
+            raise UpdateFailed(
+                f"No quotes returned for any of the {len(self.stocks)} configured symbols"
+            )
+
+        if missing := [s for s in self.stocks if s not in quotes]:
+            # A partial failure still leaves usable data, so this stays a
+            # warning rather than failing the whole poll.
+            _LOGGER.warning("No quote returned for: %s", ", ".join(missing))
+
         prices = {s: round(q.current_price, 2) for s, q in quotes.items()}
         _LOGGER.info("Stock poll complete: %s", {s: f"${p:.2f}" for s, p in prices.items()})
         self.hass.bus.async_fire(EVENT_STOCK_UPDATE, {"prices": prices})
