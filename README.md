@@ -19,13 +19,12 @@ A Home Assistant custom integration (HACS) for tracking stock prices and, option
 
 All events are fired on the HA event bus (`ha_stock_app_*`) for use with Node-RED or automations to deliver mobile notifications.
 
-### Node-RED notifications
+### Node-RED notifications (optional)
 
-`node-red-notification-flow-v3.json` is an importable flow that listens for the integration's events and sends formatted notifications to your phone. The message formatting reproduces the original `node-red-portfolio-flow-v2` engine, so alerts look the same as they did before the integration took over the polling.
-
-After importing, change the action on the **Mobile Notify** node if your device isn't `notify.mobile_app_owner`. Test it with the integration's own **Send Test Notification** button after picking a type from the **Test Notification Type** dropdown — test events are tagged 🧪 and bypass repeat suppression.
-
-The older `node-red-*.json` and `monarch-*.json` files in this repo are the superseded standalone engine, kept for reference only.
+`examples/node-red-notifications.json` is an importable Node-RED flow that turns
+these events into mobile notifications. Its formatting reproduces the standalone
+Node-RED engine this integration replaced, so alerts look the same as they did
+before. See [`examples/README.md`](examples/README.md) for setup.
 
 ## Installation
 
@@ -44,6 +43,8 @@ Configuration is entirely through the HA UI:
 ## Version History
 
 ### v2.3.0 — 2026-07-24
+- Removed the superseded standalone Node-RED engine (`node-red-portfolio-flow-v2.json` and its add-ons). The integration has done that work since v2.0.0; the flows remain in git history
+- Added `examples/node-red-notifications.json`, an optional Node-RED flow that turns the integration's events into mobile notifications, formatted to match the engine it replaced
 - Added a test suite covering the market calendar, timezone handling, scheduling and quiet hours. It has no dependencies — run `python3 -m unittest discover tests`
 - Fixed end-of-day per-position P/L matching stocks by searching Monarch account *names* for the ticker. A one-letter ticker such as `A` was a substring of nearly every account name, and an account's balance was reported as the position's value. Positions are now matched against actual holdings by ticker, so the day's P/L is share count times per-share change rather than a figure derived from a percentage, and holdings split across accounts are summed
 - Fixed a failed holdings fetch being indistinguishable from an account holding nothing, which is what allowed a transient error to look like a deletion. The refresh still succeeds on a partial failure, but records that the holdings set is incomplete so the entity cleanup leaves those sensors alone
