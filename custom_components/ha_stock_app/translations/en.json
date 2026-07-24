@@ -1,0 +1,86 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Stock API Configuration",
+        "description": "Configure your stock price data source and tickers to track.",
+        "data": {
+          "api_provider": "API Provider",
+          "api_key": "API Key",
+          "stocks": "Stock Symbols (comma-separated)",
+          "poll_frequency": "Poll Frequency",
+          "alert_threshold": "Alert Threshold (%)"
+        }
+      },
+      "test_stock_api_success": {
+        "title": "Connection Successful",
+        "description": "{provider} API is working. Fetched {symbol} at {price} ({change}).\n\nClick Submit to continue."
+      },
+      "test_stock_api_failed": {
+        "title": "Connection Failed",
+        "description": "Could not fetch a quote from {provider} for {symbol}. Check your API key and try again.\n\nClick Submit to go back."
+      },
+      "monarch": {
+        "title": "Monarch Money (Optional)",
+        "description": "Optionally connect Monarch Money to track account balances and detect paychecks.\n\nThis integration uses the unofficial monarchmoney Python package (github.com/hammem/monarchmoney) to access your Monarch Money data. Your credentials are stored locally in your Home Assistant config and are only used to authenticate directly with Monarch Money. This project is not affiliated with or endorsed by Monarch Money.",
+        "data": {
+          "monarch_enabled": "Enable Monarch Money",
+          "monarch_email": "Monarch Email",
+          "monarch_password": "Monarch Password",
+          "monarch_mfa_secret": "TOTP Secret Key (if MFA enabled)"
+        }
+      },
+      "test_monarch_success": {
+        "title": "Monarch Connected",
+        "description": "Successfully authenticated with Monarch Money. Found {account_count} accounts.\n\nClick Submit to finish setup."
+      },
+      "test_monarch_failed": {
+        "title": "Monarch Connection Failed",
+        "description": "{error}\n\nClick Submit to go back and try again."
+      }
+    },
+    "error": {
+      "invalid_api_key": "Invalid API key — could not fetch a test quote.",
+      "no_stocks": "Enter at least one stock symbol.",
+      "monarch_auth_failed": "Monarch Money login failed. Check your credentials.",
+      "monarch_missing_credentials": "Email and password are required when Monarch is enabled.",
+      "invalid_symbols": "One or more symbols are invalid. Use 1-10 characters: letters, numbers, dots, or hyphens."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HA Stock App Settings",
+        "data": {
+          "stocks": "Stock Symbols (comma-separated)",
+          "poll_frequency": "Poll Frequency",
+          "alert_threshold": "Alert Threshold (%)",
+          "enable_market_hours": "Only poll during NYSE market hours",
+          "enable_eod_summary": "End-of-day summary notification",
+          "enable_market_open_event": "Market open notification",
+          "enable_finnhub_self_test": "API connectivity test at market open",
+          "monarch_enabled": "Enable Monarch Money",
+          "monarch_email": "Monarch Email",
+          "monarch_password": "Monarch Password (leave blank to keep current)",
+          "monarch_mfa_secret": "TOTP Secret Key (leave blank to keep current)",
+          "monarch_poll_interval": "Monarch Poll Interval",
+          "enable_monarch_double_refresh": "Double-refresh at open/close (workaround)",
+          "enable_paycheck_detection": "Detect paychecks from cash balance changes",
+          "enable_401k_reporting": "401k delayed NAV reporting"
+        }
+      },
+      "advanced": {
+        "title": "Advanced Settings",
+        "description": "Configure paycheck detection thresholds and 401k deferred reporting.",
+        "data": {
+          "paycheck_threshold": "Paycheck Detection Threshold ($)",
+          "paycheck_windows": "Pay Windows (day ranges, e.g. 27-5,11-19)",
+          "401k_sensor_entity": "401k Sensor Entity ID",
+          "401k_quiet_start": "Quiet Hours Start (HH:MM, ET)",
+          "401k_quiet_end": "Quiet Hours End / Morning Release (HH:MM, ET)",
+          "401k_retry_interval": "401k Check Interval"
+        }
+      }
+    }
+  }
+}

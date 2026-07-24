@@ -1,0 +1,419 @@
+[
+    {
+        "id": "ha_stock_notif_tab",
+        "type": "tab",
+        "label": "HA Stock App Notifications",
+        "disabled": false,
+        "info": "Listens for ha_stock_app events and sends formatted mobile notifications.\nRequires: HA Stock App HACS integration."
+    },
+    {
+        "id": "n_price_alert_trigger",
+        "type": "server-events",
+        "z": "ha_stock_notif_tab",
+        "name": "Price Alert Event",
+        "server": "97b53801.46be48",
+        "version": 2,
+        "event_type": "ha_stock_app_price_alert",
+        "exposeAsEntityConfig": "",
+        "waitForRunning": true,
+        "outputProperties": [
+            { "property": "payload", "propertyType": "msg", "value": "", "valueType": "eventData" }
+        ],
+        "x": 150,
+        "y": 100,
+        "wires": [["n_price_alert_format"]]
+    },
+    {
+        "id": "n_price_alert_format",
+        "type": "function",
+        "z": "ha_stock_notif_tab",
+        "name": "Format Price Alert",
+        "func": "const d = msg.payload.event;\nconst sym = d.symbol;\nconst price = parseFloat(d.price).toFixed(2);\nconst prev = parseFloat(d.previous).toFixed(2);\nconst pct = d.change_pct;\nconst dir = d.direction;\n\nconst arrow = dir === 'up' ? '📈' : '📉';\nconst sign = dir === 'up' ? '+' : '';\nconst color = dir === 'up' ? '#2E7D32' : '#D32F2F';\n\nmsg.payload = {\n    title: arrow + ' ' + sym + ' Price Alert',\n    message: sym + ' moved ' + sign + pct + '% ($' + prev + ' → $' + price + ')',\n    color: color,\n    channel: 'Stock Alerts',\n    priority: 'high'\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 100,
+        "wires": [["n_dedup", "n_notify"]]
+    },
+    {
+        "id": "n_eod_trigger",
+        "type": "server-events",
+        "z": "ha_stock_notif_tab",
+        "name": "EOD Summary Event",
+        "server": "97b53801.46be48",
+        "version": 2,
+        "event_type": "ha_stock_app_eod_summary",
+        "exposeAsEntityConfig": "",
+        "waitForRunning": true,
+        "outputProperties": [
+            { "property": "payload", "propertyType": "msg", "value": "", "valueType": "eventData" }
+        ],
+        "x": 150,
+        "y": 200,
+        "wires": [["n_eod_format"]]
+    },
+    {
+        "id": "n_eod_format",
+        "type": "function",
+        "z": "ha_stock_notif_tab",
+        "name": "Format EOD Summary",
+        "func": "const stocks = msg.payload.event.stocks;\nif (!stocks || Object.keys(stocks).length === 0) return null;\n\nconst lines = [];\nlet hasLoss = false;\nfor (const [sym, data] of Object.entries(stocks)) {\n    const sign = data.change_pct >= 0 ? '+' : '';\n    lines.push(sym + ' ' + sign + data.change_pct + '% ($' + data.price.toFixed(2) + ')');\n    if (data.change_pct < 0) hasLoss = true;\n}\n\nmsg.payload = {\n    title: '📊 End of Day Summary',\n    message: lines.join('\\n'),\n    color: hasLoss ? '#FF8F00' : '#2E7D32',\n    channel: 'Stock Alerts',\n    priority: 'default'\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 200,
+        "wires": [["n_notify"]]
+    },
+    {
+        "id": "n_paycheck_trigger",
+        "type": "server-events",
+        "z": "ha_stock_notif_tab",
+        "name": "Paycheck Detected Event",
+        "server": "97b53801.46be48",
+        "version": 2,
+        "event_type": "ha_stock_app_paycheck_detected",
+        "exposeAsEntityConfig": "",
+        "waitForRunning": true,
+        "outputProperties": [
+            { "property": "payload", "propertyType": "msg", "value": "", "valueType": "eventData" }
+        ],
+        "x": 150,
+        "y": 300,
+        "wires": [["n_paycheck_format"]]
+    },
+    {
+        "id": "n_paycheck_format",
+        "type": "function",
+        "z": "ha_stock_notif_tab",
+        "name": "Format Paycheck Alert",
+        "func": "const d = msg.payload.event;\nconst amount = Math.round(d.amount).toLocaleString('en-US');\nconst balance = Math.round(d.new_balance).toLocaleString('en-US');\nconst windowText = d.in_pay_window\n    ? ' — lines up with payday'\n    : ' — outside normal pay window';\n\nmsg.payload = {\n    title: d.in_pay_window ? '💰 Likely Paycheck' : '💵 Large Cash Increase',\n    message: 'Cash increased by +$' + amount + windowText + '\\nNew balance: $' + balance,\n    color: '#2E7D32',\n    channel: 'Network Restored',\n    priority: 'high'\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 300,
+        "wires": [["n_notify"]]
+    },
+    {
+        "id": "n_monarch_trigger",
+        "type": "server-events",
+        "z": "ha_stock_notif_tab",
+        "name": "Monarch Status Event",
+        "server": "97b53801.46be48",
+        "version": 2,
+        "event_type": "ha_stock_app_monarch_status",
+        "exposeAsEntityConfig": "",
+        "waitForRunning": true,
+        "outputProperties": [
+            { "property": "payload", "propertyType": "msg", "value": "", "valueType": "eventData" }
+        ],
+        "x": 150,
+        "y": 380,
+        "wires": [["n_monarch_format"]]
+    },
+    {
+        "id": "n_monarch_format",
+        "type": "function",
+        "z": "ha_stock_notif_tab",
+        "name": "Format Monarch Status",
+        "func": "const status = msg.payload.event.status;\n\nif (status === 'online') {\n    msg.payload = {\n        title: '✅ Monarch Integration Restored',\n        message: 'Monarch sensors are reporting again. Holdings and balances are back.',\n        color: '#2E7D32',\n        channel: 'Flow Errors',\n        priority: 'default'\n    };\n} else {\n    msg.payload = {\n        title: '⚠️ Monarch Integration Down',\n        message: 'Monarch sensors are unavailable — balances may be stale until it reconnects.',\n        color: '#D32F2F',\n        channel: 'Flow Errors',\n        priority: 'high'\n    };\n}\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 380,
+        "wires": [["n_notify"]]
+    },
+    {
+        "id": "n_dedup",
+        "type": "function",
+        "z": "ha_stock_notif_tab",
+        "name": "Price Alert Dedup (2h)",
+        "func": "const key = msg.payload.title.slice(0, 40);\nconst now = Date.now();\nconst seen = flow.get('alert_seen') || {};\n\n// Clean entries older than 24h\nfor (const k of Object.keys(seen)) {\n    if (now - seen[k] > 24 * 3600 * 1000) delete seen[k];\n}\n\nif (seen[key] && now - seen[key] < 2 * 3600 * 1000) {\n    flow.set('alert_seen', seen);\n    return null;\n}\n\nseen[key] = now;\nflow.set('alert_seen', seen);\nreturn null;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 650,
+        "y": 60,
+        "wires": [[]]
+    },
+    {
+        "id": "n_notify",
+        "type": "api-call-service",
+        "z": "ha_stock_notif_tab",
+        "name": "Mobile Notify — Owner",
+        "server": "97b53801.46be48",
+        "version": 7,
+        "debugenabled": false,
+        "action": "notify.mobile_app_owner",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "{\n    \"title\": payload.title,\n    \"message\": payload.message,\n    \"data\": {\n        \"color\": payload.color,\n        \"channel\": payload.channel,\n        \"priority\": payload.priority,\n        \"ttl\": 0\n    }\n}",
+        "dataType": "jsonata",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "domain": "notify",
+        "service": "mobile_app_owner",
+        "x": 660,
+        "y": 250,
+        "wires": [[]]
+    },
+    {
+        "id": "n_market_open_trigger",
+        "type": "server-events",
+        "z": "ha_stock_notif_tab",
+        "name": "Market Open Event",
+        "server": "97b53801.46be48",
+        "version": 2,
+        "event_type": "ha_stock_app_market_open",
+        "exposeAsEntityConfig": "",
+        "waitForRunning": true,
+        "outputProperties": [
+            { "property": "payload", "propertyType": "msg", "value": "", "valueType": "eventData" }
+        ],
+        "x": 150,
+        "y": 500,
+        "wires": [["n_market_open_format"]]
+    },
+    {
+        "id": "n_market_open_format",
+        "type": "function",
+        "z": "ha_stock_notif_tab",
+        "name": "Format Market Open",
+        "func": "const d = msg.payload.event;\nconst early = d.early_close;\nconst closeTime = d.close_time;\n\nlet message = 'NYSE is now open.';\nif (early) {\n    message += ' Early close today at ' + closeTime + ' ET.';\n}\n\nmsg.payload = {\n    title: '🔔 Market Open',\n    message: message,\n    color: '#2E7D32',\n    channel: 'Stock Alerts',\n    priority: 'default'\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 500,
+        "wires": [["n_notify"]]
+    },
+    {
+        "id": "n_eod2_trigger",
+        "type": "server-events",
+        "z": "ha_stock_notif_tab",
+        "name": "401k Update Event",
+        "server": "97b53801.46be48",
+        "version": 2,
+        "event_type": "ha_stock_app_eod2_summary",
+        "exposeAsEntityConfig": "",
+        "waitForRunning": true,
+        "outputProperties": [
+            { "property": "payload", "propertyType": "msg", "value": "", "valueType": "eventData" }
+        ],
+        "x": 150,
+        "y": 600,
+        "wires": [["n_eod2_format"]]
+    },
+    {
+        "id": "n_eod2_format",
+        "type": "function",
+        "z": "ha_stock_notif_tab",
+        "name": "Format 401k Update",
+        "func": "const d = msg.payload.event;\nconst change = parseFloat(d.day_change).toFixed(2);\nconst pct = parseFloat(d.day_change_pct).toFixed(2);\nconst newVal = parseFloat(d.new_value).toFixed(2);\nconst sign = d.day_change >= 0 ? '+' : '';\nconst arrow = d.day_change >= 0 ? '📈' : '📉';\n\nlet message = '401k ' + sign + '$' + change + ' (' + sign + pct + '%)';\nmessage += '\\nNew value: $' + newVal;\nif (d.deferred) {\n    message += '\\n(Deferred from overnight)';\n}\n\nmsg.payload = {\n    title: arrow + ' 401k Update',\n    message: message,\n    color: d.day_change >= 0 ? '#2E7D32' : '#D32F2F',\n    channel: 'Stock Alerts',\n    priority: 'default'\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 600,
+        "wires": [["n_notify"]]
+    },
+    {
+        "id": "n_finnhub_error_trigger",
+        "type": "server-events",
+        "z": "ha_stock_notif_tab",
+        "name": "Finnhub Error Event",
+        "server": "97b53801.46be48",
+        "version": 2,
+        "event_type": "ha_stock_app_finnhub_error",
+        "exposeAsEntityConfig": "",
+        "waitForRunning": true,
+        "outputProperties": [
+            { "property": "payload", "propertyType": "msg", "value": "", "valueType": "eventData" }
+        ],
+        "x": 150,
+        "y": 700,
+        "wires": [["n_finnhub_error_format"]]
+    },
+    {
+        "id": "n_finnhub_error_format",
+        "type": "function",
+        "z": "ha_stock_notif_tab",
+        "name": "Format Finnhub Error",
+        "func": "const d = msg.payload.event;\n\nmsg.payload = {\n    title: '⚠️ Finnhub API Error',\n    message: 'Self-test failed for ' + d.symbol + ': ' + d.error + '\\nStock data may be unavailable today.',\n    color: '#D32F2F',\n    channel: 'Flow Errors',\n    priority: 'high'\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 700,
+        "wires": [["n_notify"]]
+    },
+    {
+        "id": "n_test_price",
+        "type": "inject",
+        "z": "ha_stock_notif_tab",
+        "name": "TEST: Price Alert",
+        "props": [
+            { "p": "payload", "v": "{\"event\":{\"symbol\":\"NVDA\",\"price\":142.65,\"previous\":139.20,\"change_pct\":2.48,\"direction\":\"up\"}}", "vt": "json" }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 150,
+        "y": 850,
+        "wires": [["n_price_alert_format"]]
+    },
+    {
+        "id": "n_test_eod",
+        "type": "inject",
+        "z": "ha_stock_notif_tab",
+        "name": "TEST: EOD Summary",
+        "props": [
+            { "p": "payload", "v": "{\"event\":{\"stocks\":{\"VOO\":{\"price\":523.47,\"change\":3.65,\"change_pct\":0.70},\"VTI\":{\"price\":278.93,\"change\":2.53,\"change_pct\":0.92},\"NVDA\":{\"price\":142.65,\"change\":3.45,\"change_pct\":2.48},\"HPE\":{\"price\":21.34,\"change\":-0.44,\"change_pct\":-2.02},\"ANET\":{\"price\":398.12,\"change\":5.57,\"change_pct\":1.42}}}}", "vt": "json" }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 150,
+        "y": 900,
+        "wires": [["n_eod_format"]]
+    },
+    {
+        "id": "n_test_paycheck",
+        "type": "inject",
+        "z": "ha_stock_notif_tab",
+        "name": "TEST: Paycheck",
+        "props": [
+            { "p": "payload", "v": "{\"event\":{\"amount\":4821.50,\"new_balance\":48120.33,\"in_pay_window\":true}}", "vt": "json" }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 150,
+        "y": 950,
+        "wires": [["n_paycheck_format"]]
+    },
+    {
+        "id": "n_test_monarch_down",
+        "type": "inject",
+        "z": "ha_stock_notif_tab",
+        "name": "TEST: Monarch Down",
+        "props": [
+            { "p": "payload", "v": "{\"event\":{\"status\":\"offline\"}}", "vt": "json" }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 150,
+        "y": 1000,
+        "wires": [["n_monarch_format"]]
+    },
+    {
+        "id": "n_test_monarch_up",
+        "type": "inject",
+        "z": "ha_stock_notif_tab",
+        "name": "TEST: Monarch Restored",
+        "props": [
+            { "p": "payload", "v": "{\"event\":{\"status\":\"online\"}}", "vt": "json" }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 150,
+        "y": 1050,
+        "wires": [["n_monarch_format"]]
+    },
+    {
+        "id": "n_test_market_open",
+        "type": "inject",
+        "z": "ha_stock_notif_tab",
+        "name": "TEST: Market Open",
+        "props": [
+            { "p": "payload", "v": "{\"event\":{\"date\":\"2025-01-15\",\"early_close\":false,\"close_time\":\"16:00\"}}", "vt": "json" }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 150,
+        "y": 1100,
+        "wires": [["n_market_open_format"]]
+    },
+    {
+        "id": "n_test_eod2",
+        "type": "inject",
+        "z": "ha_stock_notif_tab",
+        "name": "TEST: 401k Update",
+        "props": [
+            { "p": "payload", "v": "{\"event\":{\"sensor\":\"sensor.monarch_401k\",\"previous_value\":125000.00,\"new_value\":125750.50,\"day_change\":750.50,\"day_change_pct\":0.60,\"deferred\":false}}", "vt": "json" }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 150,
+        "y": 1150,
+        "wires": [["n_eod2_format"]]
+    },
+    {
+        "id": "n_test_finnhub_error",
+        "type": "inject",
+        "z": "ha_stock_notif_tab",
+        "name": "TEST: Finnhub Error",
+        "props": [
+            { "p": "payload", "v": "{\"event\":{\"error\":\"HTTP 401\",\"symbol\":\"VOO\"}}", "vt": "json" }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 150,
+        "y": 1200,
+        "wires": [["n_finnhub_error_format"]]
+    }
+]
