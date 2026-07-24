@@ -6,6 +6,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback, CALLBACK_TYPE
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_track_time_change, async_call_later
 
@@ -132,6 +133,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.warning(
                 "Monarch Money enabled but monarchmoney package not installed. "
                 "Install it with: pip install monarchmoney"
+            )
+        except ConfigEntryNotReady:
+            # async_config_entry_first_refresh raises this when Monarch is
+            # unreachable or rejects the credentials. It is deliberately not
+            # re-raised: Monarch is optional here, and propagating it would put
+            # the whole entry into setup-retry, taking stock tracking down with
+            # it. The coordinator is still stored so the refresh button and the
+            # scheduled double-refresh can recover it without a reload -- and so
+            # the sensor platform can tell "temporarily unavailable" apart from
+            # "removed" when it prunes stale entities.
+            data["monarch_coordinator"] = monarch_coordinator
+            _LOGGER.warning(
+                "Monarch Money is not reachable; continuing without it. "
+                "Its sensors are preserved and will recover on the next refresh"
+            )
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                monarch_issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="monarch_auth_failed",
             )
         except (OSError, PermissionError) as exc:
             _LOGGER.error("Monarch Money file/permission error: %s", type(exc).__name__)

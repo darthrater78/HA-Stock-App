@@ -54,10 +54,31 @@ async def async_setup_entry(
 
     async_add_entities(entities, update_before_add=True)
 
+    monarch_data = monarch_coordinator.data if monarch_coordinator else None
+    monarch_loaded = bool(monarch_data)
+    holdings_loaded = bool(monarch_data and monarch_data.get("holdings"))
     valid_unique_ids = {e.unique_id for e in entities}
+
+    def _safe_to_remove(unique_id: str) -> bool:
+        """Whether a registry entry can be positively accounted for as stale.
+
+        Removal is permanent: it drops the entity ID, any rename, icon and area
+        the user set, and orphans long-term statistics. So only prune what was
+        actually evaluated this run. If Monarch did not load -- a transient
+        outage, an expired session -- its entities are left alone rather than
+        destroyed over a condition that may clear on the next refresh.
+        """
+        if unique_id in valid_unique_ids:
+            return False
+        if unique_id.startswith(f"{DOMAIN}_monarch_holding_"):
+            return holdings_loaded
+        if unique_id.startswith(f"{DOMAIN}_monarch"):
+            return monarch_loaded
+        return True
+
     ent_reg = er.async_get(hass)
     for ent_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
-        if ent_entry.domain == "sensor" and ent_entry.unique_id not in valid_unique_ids:
+        if ent_entry.domain == "sensor" and _safe_to_remove(ent_entry.unique_id):
             ent_reg.async_remove(ent_entry.entity_id)
 
 
