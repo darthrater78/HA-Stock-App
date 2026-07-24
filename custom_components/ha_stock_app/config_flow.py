@@ -320,7 +320,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         current = self._config_entry.data
         opts = self._config_entry.options
 
-        saved_poll = current.get(CONF_POLL_FREQUENCY, DEFAULT_POLL_FREQUENCY)
+        saved_poll = int(current.get(CONF_POLL_FREQUENCY, DEFAULT_POLL_FREQUENCY))
 
         schema = vol.Schema({
             vol.Required(CONF_STOCKS, default=", ".join(current.get(CONF_STOCKS, []))): str,
@@ -347,7 +347,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         })
 
         if current.get(CONF_MONARCH_ENABLED, False):
-            monarch_poll = opts.get(CONF_MONARCH_POLL_INTERVAL) or current.get(CONF_MONARCH_POLL_INTERVAL) or DEFAULT_MONARCH_POLL_INTERVAL
+            monarch_poll = int(opts.get(CONF_MONARCH_POLL_INTERVAL) or current.get(CONF_MONARCH_POLL_INTERVAL) or DEFAULT_MONARCH_POLL_INTERVAL)
             schema = schema.extend({
                 vol.Required(CONF_MONARCH_POLL_INTERVAL, default=monarch_poll): vol.All(
                     vol.Coerce(int), vol.In({
@@ -453,7 +453,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             schema_dict[vol.Required(CONF_401K_SENSOR, default=opts.get(CONF_401K_SENSOR, ""))] = str
             schema_dict[vol.Optional(CONF_401K_QUIET_START, default=opts.get(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START))] = str
             schema_dict[vol.Optional(CONF_401K_QUIET_END, default=opts.get(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END))] = str
-            saved_retry = opts.get(CONF_401K_RETRY_INTERVAL) or DEFAULT_401K_RETRY_INTERVAL
+            saved_retry = int(opts.get(CONF_401K_RETRY_INTERVAL) or DEFAULT_401K_RETRY_INTERVAL)
             schema_dict[vol.Required(CONF_401K_RETRY_INTERVAL, default=saved_retry)] = vol.All(
                 vol.Coerce(int), vol.In({
                     15: "15 minutes",

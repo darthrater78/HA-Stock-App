@@ -35,6 +35,9 @@ Configuration is entirely through the HA UI:
 
 ## Version History
 
+### v2.2.2 — 2026-07-24
+- Fixed poll frequency radio buttons not showing the saved selection: stored string values (e.g. `"300"`) didn't match integer dict keys (`300`) — now coerced to int on both read and write
+
 ### v2.2.1 — 2026-07-24
 - Reverted direct notification delivery (back to Node-RED for notifications)
 - Fixed poll frequency not persisting: added `vol.Coerce(int)` to all integer dropdown selectors (poll frequency, Monarch poll interval, 401k retry interval) — HA frontend sends JSON string keys, which silently failed `vol.In` validation against integer keys
