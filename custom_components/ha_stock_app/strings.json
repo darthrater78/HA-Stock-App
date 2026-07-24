@@ -37,6 +37,13 @@
       "test_monarch_failed": {
         "title": "Monarch Connection Failed",
         "description": "{error}\n\nClick Submit to go back and try again."
+      },
+      "select_accounts": {
+        "title": "Select Monarch Accounts",
+        "description": "Choose which Monarch Money accounts to import into Home Assistant.",
+        "data": {
+          "monarch_accounts": "Accounts"
+        }
       }
     },
     "error": {
@@ -66,7 +73,15 @@
           "monarch_poll_interval": "Monarch Poll Interval",
           "enable_monarch_double_refresh": "Double-refresh at open/close (workaround)",
           "enable_paycheck_detection": "Detect paychecks from cash balance changes",
-          "enable_401k_reporting": "401k delayed NAV reporting"
+          "enable_401k_reporting": "401k delayed NAV reporting",
+          "enable_debug_logging": "Enable debug logging"
+        }
+      },
+      "select_accounts": {
+        "title": "Select Monarch Accounts",
+        "description": "Choose which Monarch Money accounts to import. Deselect accounts you don't want as sensors.",
+        "data": {
+          "monarch_accounts": "Accounts"
         }
       },
       "advanced": {

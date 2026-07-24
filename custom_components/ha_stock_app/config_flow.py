@@ -6,6 +6,8 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+import homeassistant.helpers.config_validation as cv
+
 from .const import (
     DOMAIN,
     CONF_STOCKS,
@@ -17,6 +19,7 @@ from .const import (
     CONF_MONARCH_PASSWORD,
     CONF_MONARCH_MFA_SECRET,
     CONF_ALERT_THRESHOLD,
+    CONF_MONARCH_ACCOUNTS,
     CONF_ENABLE_MARKET_HOURS,
     CONF_ENABLE_EOD_SUMMARY,
     CONF_ENABLE_MARKET_OPEN_EVENT,
@@ -24,6 +27,7 @@ from .const import (
     CONF_ENABLE_MONARCH_DOUBLE_REFRESH,
     CONF_ENABLE_401K_REPORTING,
     CONF_ENABLE_PAYCHECK_DETECTION,
+    CONF_ENABLE_DEBUG_LOGGING,
     CONF_MONARCH_POLL_INTERVAL,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
@@ -41,6 +45,7 @@ from .const import (
     DEFAULT_ENABLE_MONARCH_DOUBLE_REFRESH,
     DEFAULT_ENABLE_401K_REPORTING,
     DEFAULT_ENABLE_PAYCHECK_DETECTION,
+    DEFAULT_ENABLE_DEBUG_LOGGING,
     DEFAULT_MONARCH_POLL_INTERVAL,
     DEFAULT_PAYCHECK_THRESHOLD,
     DEFAULT_PAYCHECK_WINDOWS,
@@ -57,6 +62,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._data: dict = {}
+        self._monarch_accounts: list = []
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -186,6 +192,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if await client.authenticate():
             accounts = await client.get_accounts()
+            self._monarch_accounts = accounts
             return self.async_show_form(
                 step_id="test_monarch_success",
                 data_schema=vol.Schema({}),
@@ -207,7 +214,26 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_test_monarch_success(self, user_input=None):
-        return self.async_create_entry(title="HA Stock App", data=self._data)
+        return await self.async_step_select_accounts()
+
+    async def async_step_select_accounts(self, user_input=None):
+        if user_input is not None:
+            self._data[CONF_MONARCH_ACCOUNTS] = user_input.get(CONF_MONARCH_ACCOUNTS, [])
+            return self.async_create_entry(title="HA Stock App", data=self._data)
+
+        account_options = {
+            acct.id: f"{acct.institution} - {acct.name}"
+            for acct in self._monarch_accounts
+        }
+        return self.async_show_form(
+            step_id="select_accounts",
+            data_schema=vol.Schema({
+                vol.Required(
+                    CONF_MONARCH_ACCOUNTS,
+                    default=list(account_options.keys()),
+                ): cv.multi_select(account_options),
+            }),
+        )
 
     async def async_step_test_monarch_failed(self, user_input=None):
         return await self.async_step_monarch()
@@ -261,6 +287,10 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                     CONF_ENABLE_FINNHUB_SELF_TEST: user_input.get(CONF_ENABLE_FINNHUB_SELF_TEST, DEFAULT_ENABLE_FINNHUB_SELF_TEST),
                 })
 
+                self._options[CONF_ENABLE_DEBUG_LOGGING] = user_input.get(
+                    CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING
+                )
+
                 if monarch_enabled:
                     self._options[CONF_MONARCH_POLL_INTERVAL] = user_input.get(
                         CONF_MONARCH_POLL_INTERVAL, DEFAULT_MONARCH_POLL_INTERVAL
@@ -274,6 +304,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                     self._options[CONF_ENABLE_401K_REPORTING] = user_input.get(
                         CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING
                     )
+                    return await self.async_step_select_accounts()
 
                 needs_advanced = (
                     self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False)
@@ -310,7 +341,8 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         }
 
         if current.get(CONF_MONARCH_ENABLED, False):
-            schema_dict[vol.Optional(CONF_MONARCH_POLL_INTERVAL, default=opts.get(CONF_MONARCH_POLL_INTERVAL, DEFAULT_MONARCH_POLL_INTERVAL))] = vol.In({
+            saved_poll = opts.get(CONF_MONARCH_POLL_INTERVAL) or current.get(CONF_MONARCH_POLL_INTERVAL) or DEFAULT_MONARCH_POLL_INTERVAL
+            schema_dict[vol.Required(CONF_MONARCH_POLL_INTERVAL, default=saved_poll)] = vol.In({
                 5: "5 minutes",
                 10: "10 minutes",
                 15: "15 minutes",
@@ -321,10 +353,55 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             schema_dict[vol.Optional(CONF_ENABLE_PAYCHECK_DETECTION, default=opts.get(CONF_ENABLE_PAYCHECK_DETECTION, DEFAULT_ENABLE_PAYCHECK_DETECTION))] = bool
             schema_dict[vol.Optional(CONF_ENABLE_401K_REPORTING, default=opts.get(CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING))] = bool
 
+        schema_dict[vol.Optional(CONF_ENABLE_DEBUG_LOGGING, default=opts.get(CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING))] = bool
+
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(schema_dict),
             errors=errors,
+        )
+
+    async def async_step_select_accounts(self, user_input=None):
+        if user_input is not None:
+            new_data = {**self._config_entry.data}
+            new_data[CONF_MONARCH_ACCOUNTS] = user_input.get(CONF_MONARCH_ACCOUNTS, [])
+            self.hass.config_entries.async_update_entry(self._config_entry, data=new_data)
+
+            needs_advanced = (
+                self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False)
+                or self._options.get(CONF_ENABLE_401K_REPORTING, False)
+            )
+            if needs_advanced:
+                return await self.async_step_advanced()
+            return self.async_create_entry(title="", data=self._options)
+
+        account_options: dict[str, str] = {}
+        data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
+        coordinator = data.get("monarch_coordinator")
+        if coordinator and coordinator.data:
+            for acct_id, acct in coordinator.data.get("accounts", {}).items():
+                account_options[acct_id] = f"{acct.institution} - {acct.name}"
+
+        if not account_options:
+            needs_advanced = (
+                self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False)
+                or self._options.get(CONF_ENABLE_401K_REPORTING, False)
+            )
+            if needs_advanced:
+                return await self.async_step_advanced()
+            return self.async_create_entry(title="", data=self._options)
+
+        current_selected = self._config_entry.data.get(
+            CONF_MONARCH_ACCOUNTS, list(account_options.keys())
+        )
+        return self.async_show_form(
+            step_id="select_accounts",
+            data_schema=vol.Schema({
+                vol.Required(
+                    CONF_MONARCH_ACCOUNTS,
+                    default=current_selected,
+                ): cv.multi_select(account_options),
+            }),
         )
 
     async def async_step_advanced(self, user_input=None):
@@ -364,7 +441,8 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             schema_dict[vol.Required(CONF_401K_SENSOR, default=opts.get(CONF_401K_SENSOR, ""))] = str
             schema_dict[vol.Optional(CONF_401K_QUIET_START, default=opts.get(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START))] = str
             schema_dict[vol.Optional(CONF_401K_QUIET_END, default=opts.get(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END))] = str
-            schema_dict[vol.Optional(CONF_401K_RETRY_INTERVAL, default=opts.get(CONF_401K_RETRY_INTERVAL, DEFAULT_401K_RETRY_INTERVAL))] = vol.In({
+            saved_retry = opts.get(CONF_401K_RETRY_INTERVAL) or DEFAULT_401K_RETRY_INTERVAL
+            schema_dict[vol.Required(CONF_401K_RETRY_INTERVAL, default=saved_retry)] = vol.In({
                 15: "15 minutes",
                 30: "30 minutes",
                 60: "1 hour",
