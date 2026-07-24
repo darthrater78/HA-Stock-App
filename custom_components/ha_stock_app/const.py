@@ -11,12 +11,6 @@ CONF_MONARCH_ENABLED = "monarch_enabled"
 CONF_MONARCH_MFA_SECRET = "monarch_mfa_secret"
 CONF_ALERT_THRESHOLD = "alert_threshold"
 
-MONARCH_ATTRIBUTION = (
-    "Account data powered by monarchmoney — "
-    "an unofficial Python API for Monarch Money. "
-    "https://github.com/hammem/monarchmoney"
-)
-
 DEFAULT_PROVIDER = "finnhub"
 DEFAULT_POLL_FREQUENCY = 300  # 5 minutes
 DEFAULT_ALERT_THRESHOLD = 2.0  # percent

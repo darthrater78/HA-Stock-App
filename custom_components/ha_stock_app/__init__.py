@@ -334,7 +334,7 @@ class ScheduledFeatures:
                 continue
 
             @callback
-            def _make_cb(h=handler, hr=hour, mn=minute):
+            def _make_cb(h=handler):
                 async def _cb(_now):
                     from .market import NYSECalendar, today_et
                     if not NYSECalendar.is_trading_day(today_et(self.hass)):

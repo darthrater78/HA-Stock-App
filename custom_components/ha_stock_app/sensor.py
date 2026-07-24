@@ -6,7 +6,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -72,10 +72,6 @@ class StockPriceSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{DOMAIN}_stock_{symbol.lower()}"
         self._attr_name = f"{symbol} Stock Price"
         self._attr_device_info = _device_info(entry)
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        self.async_write_ha_state()
 
     @property
     def native_value(self) -> float | None:
@@ -188,10 +184,6 @@ class LastPollSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = "Last Stock Poll"
         self._attr_device_info = _device_info(entry)
 
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        self.async_write_ha_state()
-
     @property
     def native_value(self):
         if self.coordinator.last_update_success_time:
@@ -207,10 +199,6 @@ class MarketStatusSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{DOMAIN}_market_status"
         self._attr_name = "Market Status"
         self._attr_device_info = _device_info(entry)
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        self.async_write_ha_state()
 
     @property
     def native_value(self) -> str:
