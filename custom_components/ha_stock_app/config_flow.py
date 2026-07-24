@@ -318,64 +318,48 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         current = self._config_entry.data
         opts = self._config_entry.options
 
-        schema_dict = {
-            vol.Required(CONF_STOCKS): str,
-            vol.Required(CONF_POLL_FREQUENCY): vol.In({
+        saved_poll = current.get(CONF_POLL_FREQUENCY, DEFAULT_POLL_FREQUENCY)
+
+        schema = vol.Schema({
+            vol.Required(CONF_STOCKS, default=", ".join(current.get(CONF_STOCKS, []))): str,
+            vol.Required(CONF_POLL_FREQUENCY, default=saved_poll): vol.In({
                 60: "1 minute",
                 300: "5 minutes",
                 600: "10 minutes",
                 900: "15 minutes",
                 1800: "30 minutes",
             }),
-            vol.Optional(CONF_ALERT_THRESHOLD): vol.All(
+            vol.Optional(CONF_ALERT_THRESHOLD, default=current.get(CONF_ALERT_THRESHOLD, DEFAULT_ALERT_THRESHOLD)): vol.All(
                 vol.Coerce(float), vol.Range(min=0.1, max=100.0)
             ),
-            vol.Optional(CONF_ENABLE_MARKET_HOURS): bool,
-            vol.Optional(CONF_ENABLE_EOD_SUMMARY): bool,
-            vol.Optional(CONF_ENABLE_MARKET_OPEN_EVENT): bool,
-            vol.Optional(CONF_ENABLE_FINNHUB_SELF_TEST): bool,
-            vol.Optional(CONF_MONARCH_ENABLED): bool,
-            vol.Optional(CONF_MONARCH_EMAIL): str,
-            vol.Optional(CONF_MONARCH_PASSWORD): str,
-            vol.Optional(CONF_MONARCH_MFA_SECRET): str,
-        }
-
-        suggested = {
-            CONF_STOCKS: ", ".join(current.get(CONF_STOCKS, [])),
-            CONF_POLL_FREQUENCY: opts.get(CONF_POLL_FREQUENCY) or current.get(CONF_POLL_FREQUENCY, DEFAULT_POLL_FREQUENCY),
-            CONF_ALERT_THRESHOLD: current.get(CONF_ALERT_THRESHOLD, DEFAULT_ALERT_THRESHOLD),
-            CONF_ENABLE_MARKET_HOURS: opts.get(CONF_ENABLE_MARKET_HOURS, DEFAULT_ENABLE_MARKET_HOURS),
-            CONF_ENABLE_EOD_SUMMARY: opts.get(CONF_ENABLE_EOD_SUMMARY, DEFAULT_ENABLE_EOD_SUMMARY),
-            CONF_ENABLE_MARKET_OPEN_EVENT: opts.get(CONF_ENABLE_MARKET_OPEN_EVENT, DEFAULT_ENABLE_MARKET_OPEN_EVENT),
-            CONF_ENABLE_FINNHUB_SELF_TEST: opts.get(CONF_ENABLE_FINNHUB_SELF_TEST, DEFAULT_ENABLE_FINNHUB_SELF_TEST),
-            CONF_MONARCH_ENABLED: current.get(CONF_MONARCH_ENABLED, False),
-            CONF_MONARCH_EMAIL: current.get(CONF_MONARCH_EMAIL, ""),
-            CONF_MONARCH_PASSWORD: "",
-            CONF_MONARCH_MFA_SECRET: "",
-        }
+            vol.Optional(CONF_ENABLE_MARKET_HOURS, default=opts.get(CONF_ENABLE_MARKET_HOURS, DEFAULT_ENABLE_MARKET_HOURS)): bool,
+            vol.Optional(CONF_ENABLE_EOD_SUMMARY, default=opts.get(CONF_ENABLE_EOD_SUMMARY, DEFAULT_ENABLE_EOD_SUMMARY)): bool,
+            vol.Optional(CONF_ENABLE_MARKET_OPEN_EVENT, default=opts.get(CONF_ENABLE_MARKET_OPEN_EVENT, DEFAULT_ENABLE_MARKET_OPEN_EVENT)): bool,
+            vol.Optional(CONF_ENABLE_FINNHUB_SELF_TEST, default=opts.get(CONF_ENABLE_FINNHUB_SELF_TEST, DEFAULT_ENABLE_FINNHUB_SELF_TEST)): bool,
+            vol.Optional(CONF_MONARCH_ENABLED, default=current.get(CONF_MONARCH_ENABLED, False)): bool,
+            vol.Optional(CONF_MONARCH_EMAIL, default=current.get(CONF_MONARCH_EMAIL, "")): str,
+            vol.Optional(CONF_MONARCH_PASSWORD, default=""): str,
+            vol.Optional(CONF_MONARCH_MFA_SECRET, default=""): str,
+        })
 
         if current.get(CONF_MONARCH_ENABLED, False):
-            schema_dict[vol.Required(CONF_MONARCH_POLL_INTERVAL)] = vol.In({
-                5: "5 minutes",
-                10: "10 minutes",
-                15: "15 minutes",
-                30: "30 minutes",
-                60: "1 hour",
+            monarch_poll = opts.get(CONF_MONARCH_POLL_INTERVAL) or current.get(CONF_MONARCH_POLL_INTERVAL) or DEFAULT_MONARCH_POLL_INTERVAL
+            schema = schema.extend({
+                vol.Required(CONF_MONARCH_POLL_INTERVAL, default=monarch_poll): vol.In({
+                    5: "5 minutes",
+                    10: "10 minutes",
+                    15: "15 minutes",
+                    30: "30 minutes",
+                    60: "1 hour",
+                }),
+                vol.Optional(CONF_ENABLE_MONARCH_DOUBLE_REFRESH, default=opts.get(CONF_ENABLE_MONARCH_DOUBLE_REFRESH, DEFAULT_ENABLE_MONARCH_DOUBLE_REFRESH)): bool,
+                vol.Optional(CONF_ENABLE_PAYCHECK_DETECTION, default=opts.get(CONF_ENABLE_PAYCHECK_DETECTION, DEFAULT_ENABLE_PAYCHECK_DETECTION)): bool,
+                vol.Optional(CONF_ENABLE_401K_REPORTING, default=opts.get(CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING)): bool,
             })
-            schema_dict[vol.Optional(CONF_ENABLE_MONARCH_DOUBLE_REFRESH)] = bool
-            schema_dict[vol.Optional(CONF_ENABLE_PAYCHECK_DETECTION)] = bool
-            schema_dict[vol.Optional(CONF_ENABLE_401K_REPORTING)] = bool
-            suggested[CONF_MONARCH_POLL_INTERVAL] = opts.get(CONF_MONARCH_POLL_INTERVAL) or current.get(CONF_MONARCH_POLL_INTERVAL) or DEFAULT_MONARCH_POLL_INTERVAL
-            suggested[CONF_ENABLE_MONARCH_DOUBLE_REFRESH] = opts.get(CONF_ENABLE_MONARCH_DOUBLE_REFRESH, DEFAULT_ENABLE_MONARCH_DOUBLE_REFRESH)
-            suggested[CONF_ENABLE_PAYCHECK_DETECTION] = opts.get(CONF_ENABLE_PAYCHECK_DETECTION, DEFAULT_ENABLE_PAYCHECK_DETECTION)
-            suggested[CONF_ENABLE_401K_REPORTING] = opts.get(CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING)
 
-        schema_dict[vol.Optional(CONF_ENABLE_DEBUG_LOGGING)] = bool
-        suggested[CONF_ENABLE_DEBUG_LOGGING] = opts.get(CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING)
-
-        schema = self.add_suggested_values_to_schema(
-            vol.Schema(schema_dict), suggested
-        )
+        schema = schema.extend({
+            vol.Optional(CONF_ENABLE_DEBUG_LOGGING, default=opts.get(CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING)): bool,
+        })
 
         return self.async_show_form(
             step_id="init",
@@ -452,35 +436,25 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
 
         opts = self._config_entry.options
         schema_dict = {}
-        suggested = {}
 
         if self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False):
-            schema_dict[vol.Optional(CONF_PAYCHECK_THRESHOLD)] = vol.All(
+            schema_dict[vol.Optional(CONF_PAYCHECK_THRESHOLD, default=opts.get(CONF_PAYCHECK_THRESHOLD, DEFAULT_PAYCHECK_THRESHOLD))] = vol.All(
                 vol.Coerce(float), vol.Range(min=100.0, max=50000.0)
             )
-            schema_dict[vol.Optional(CONF_PAYCHECK_WINDOWS)] = str
-            suggested[CONF_PAYCHECK_THRESHOLD] = opts.get(CONF_PAYCHECK_THRESHOLD, DEFAULT_PAYCHECK_THRESHOLD)
-            suggested[CONF_PAYCHECK_WINDOWS] = opts.get(CONF_PAYCHECK_WINDOWS, DEFAULT_PAYCHECK_WINDOWS)
+            schema_dict[vol.Optional(CONF_PAYCHECK_WINDOWS, default=opts.get(CONF_PAYCHECK_WINDOWS, DEFAULT_PAYCHECK_WINDOWS))] = str
 
         if self._options.get(CONF_ENABLE_401K_REPORTING, False):
-            schema_dict[vol.Required(CONF_401K_SENSOR)] = str
-            schema_dict[vol.Optional(CONF_401K_QUIET_START)] = str
-            schema_dict[vol.Optional(CONF_401K_QUIET_END)] = str
-            schema_dict[vol.Required(CONF_401K_RETRY_INTERVAL)] = vol.In({
+            schema_dict[vol.Required(CONF_401K_SENSOR, default=opts.get(CONF_401K_SENSOR, ""))] = str
+            schema_dict[vol.Optional(CONF_401K_QUIET_START, default=opts.get(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START))] = str
+            schema_dict[vol.Optional(CONF_401K_QUIET_END, default=opts.get(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END))] = str
+            saved_retry = opts.get(CONF_401K_RETRY_INTERVAL) or DEFAULT_401K_RETRY_INTERVAL
+            schema_dict[vol.Required(CONF_401K_RETRY_INTERVAL, default=saved_retry)] = vol.In({
                 15: "15 minutes",
                 30: "30 minutes",
                 60: "1 hour",
             })
-            suggested[CONF_401K_SENSOR] = opts.get(CONF_401K_SENSOR, "")
-            suggested[CONF_401K_QUIET_START] = opts.get(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START)
-            suggested[CONF_401K_QUIET_END] = opts.get(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END)
-            suggested[CONF_401K_RETRY_INTERVAL] = opts.get(CONF_401K_RETRY_INTERVAL) or DEFAULT_401K_RETRY_INTERVAL
-
-        schema = self.add_suggested_values_to_schema(
-            vol.Schema(schema_dict), suggested
-        )
 
         return self.async_show_form(
             step_id="advanced",
-            data_schema=schema,
+            data_schema=vol.Schema(schema_dict),
         )
