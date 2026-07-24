@@ -1,18 +1,54 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, time, timedelta
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+_LOGGER = logging.getLogger(__name__)
 
 ET = ZoneInfo("America/New_York")
 
 
-def et_now(hass) -> datetime:
+def market_tz(name: str | None = None) -> ZoneInfo:
+    """Resolve a configured IANA zone name, falling back to Eastern."""
+    if not name:
+        return ET
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        _LOGGER.warning(
+            "Unknown market timezone %r; falling back to America/New_York", name
+        )
+        return ET
+
+
+def market_now(hass, tz: ZoneInfo | None = None) -> datetime:
     from homeassistant.util import dt as dt_util
-    return dt_util.now().astimezone(ET)
+    return dt_util.now().astimezone(tz or ET)
 
 
-def today_et(hass) -> date:
-    return et_now(hass).date()
+def market_today(hass, tz: ZoneInfo | None = None) -> date:
+    return market_now(hass, tz).date()
+
+
+def next_market_time(
+    now: datetime, hour: int, minute: int, tz: ZoneInfo
+) -> datetime:
+    """Next absolute instant at which the market clock reads hour:minute.
+
+    Resolved a calendar day at a time in the market zone rather than by adding
+    24 hours, so the result stays correct across DST transitions -- in either
+    the market's zone or Home Assistant's, which need not shift on the same
+    date. A wall time that does not exist on a spring-forward day resolves to
+    the following instant rather than being skipped.
+    """
+    local = now.astimezone(tz)
+    for offset in range(3):
+        day = (local + timedelta(days=offset)).date()
+        candidate = datetime(day.year, day.month, day.day, hour, minute, tzinfo=tz)
+        if candidate > now:
+            return candidate
+    return now + timedelta(days=1)
 
 
 def parse_pay_windows(windows_str: str) -> list[tuple[int, int]]:
@@ -123,10 +159,10 @@ class NYSECalendar:
         return time(9, 30)
 
     @staticmethod
-    def is_market_open(dt: datetime) -> bool:
-        et = dt.astimezone(ET)
-        d = et.date()
+    def is_market_open(dt: datetime, tz: ZoneInfo | None = None) -> bool:
+        local = dt.astimezone(tz or ET)
+        d = local.date()
         if not NYSECalendar.is_trading_day(d):
             return False
-        t = et.time()
+        t = local.time()
         return NYSECalendar.market_open_time() <= t < NYSECalendar.market_close_time(d)

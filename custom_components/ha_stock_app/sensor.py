@@ -14,7 +14,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_MONARCH_ACCOUNTS, DOMAIN
 from .coordinator import StockCoordinator, MonarchCoordinator
-from .market import NYSECalendar, et_now
+from .market import NYSECalendar, market_now
 from .monarch import MonarchAccount, MonarchHolding
 
 
@@ -223,7 +223,7 @@ class MarketStatusSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> str:
-        now = et_now(self.hass)
+        now = market_now(self.hass, self.coordinator.market_tz)
         d = now.date()
         if d.weekday() >= 5:
             return "Closed - Weekend"
@@ -240,7 +240,7 @@ class MarketStatusSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        now = et_now(self.hass)
+        now = market_now(self.hass, self.coordinator.market_tz)
         d = now.date()
         attrs = {"trading_day": NYSECalendar.is_trading_day(d)}
         if NYSECalendar.is_trading_day(d):

@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback, CALLBACK_TYPE
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.event import async_track_time_change, async_call_later
+from homeassistant.helpers.event import async_call_later, async_track_point_in_time
 
 import voluptuous as vol
 
@@ -24,6 +24,7 @@ from .const import (
     CONF_ENABLE_401K_REPORTING,
     CONF_ENABLE_PAYCHECK_DETECTION,
     CONF_ENABLE_DEBUG_LOGGING,
+    CONF_MARKET_TIMEZONE,
     CONF_MONARCH_POLL_INTERVAL,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
@@ -39,6 +40,7 @@ from .const import (
     DEFAULT_ENABLE_401K_REPORTING,
     DEFAULT_ENABLE_PAYCHECK_DETECTION,
     DEFAULT_ENABLE_DEBUG_LOGGING,
+    DEFAULT_MARKET_TIMEZONE,
     DEFAULT_MONARCH_POLL_INTERVAL,
     DEFAULT_PAYCHECK_THRESHOLD,
     DEFAULT_PAYCHECK_WINDOWS,
@@ -75,6 +77,7 @@ OPTION_DEFAULTS = {
     CONF_401K_QUIET_END: DEFAULT_401K_QUIET_END,
     CONF_401K_RETRY_INTERVAL: DEFAULT_401K_RETRY_INTERVAL,
     CONF_ENABLE_DEBUG_LOGGING: DEFAULT_ENABLE_DEBUG_LOGGING,
+    CONF_MARKET_TIMEZONE: DEFAULT_MARKET_TIMEZONE,
 }
 
 
@@ -324,6 +327,9 @@ class ScheduledFeatures:
         config = _merged_config(entry)
         self._config = config
 
+        from .market import market_tz
+        self._tz = market_tz(config.get(CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE))
+
     def _opt(self, key: str, default: Any = None) -> Any:
         return self._config.get(key, default)
 
@@ -335,9 +341,42 @@ class ScheduledFeatures:
     def _monarch_coordinator(self):
         return self._data.get("monarch_coordinator")
 
-    def register(self) -> None:
-        from .market import NYSECalendar, et_now, today_et
+    def _schedule_daily(self, hour: int, minute: int, handler: Any) -> None:
+        """Run handler each trading day at hour:minute in the market timezone.
 
+        async_track_time_change cannot express this: it matches Home Assistant's
+        local wall clock, and the offset to the market's clock shifts with DST --
+        the two zones need not even change on the same date. So each occurrence
+        is scheduled as an absolute instant and re-armed once it fires.
+        """
+        from .market import NYSECalendar, market_now, market_today, next_market_time
+
+        holder: list[CALLBACK_TYPE | None] = [None]
+
+        @callback
+        def _arm() -> None:
+            target = next_market_time(
+                market_now(self.hass, self._tz), hour, minute, self._tz
+            )
+            holder[0] = async_track_point_in_time(self.hass, _fired, target)
+
+        async def _fired(_now) -> None:
+            holder[0] = None
+            _arm()  # re-arm first, so a failing handler cannot break the chain
+            if NYSECalendar.is_trading_day(market_today(self.hass, self._tz)):
+                await handler()
+
+        _arm()
+
+        @callback
+        def _cancel() -> None:
+            if holder[0] is not None:
+                holder[0]()
+                holder[0] = None
+
+        self._unsubs.append(_cancel)
+
+    def register(self) -> None:
         schedules: list[tuple[int, int, str, Any]] = [
             (9, 15, CONF_ENABLE_FINNHUB_SELF_TEST, self._finnhub_self_test),
             (9, 30, CONF_ENABLE_MARKET_OPEN_EVENT, self._market_open_notify),
@@ -368,20 +407,7 @@ class ScheduledFeatures:
         for hour, minute, toggle_key, handler in schedules:
             if not self._opt(toggle_key, OPTION_DEFAULTS.get(toggle_key, False)):
                 continue
-
-            @callback
-            def _make_cb(h=handler):
-                async def _cb(_now):
-                    from .market import NYSECalendar, today_et
-                    if not NYSECalendar.is_trading_day(today_et(self.hass)):
-                        return
-                    await h()
-                return _cb
-
-            unsub = async_track_time_change(
-                self.hass, _make_cb(), hour=hour, minute=minute, second=0
-            )
-            self._unsubs.append(unsub)
+            self._schedule_daily(hour, minute, handler)
 
     def cancel_all(self) -> None:
         for unsub in self._unsubs:
@@ -416,8 +442,8 @@ class ScheduledFeatures:
             )
 
     async def _market_open_notify(self) -> None:
-        from .market import NYSECalendar, today_et
-        d = today_et(self.hass)
+        from .market import NYSECalendar, market_today
+        d = market_today(self.hass, self._tz)
         close = NYSECalendar.market_close_time(d)
         self.hass.bus.async_fire(
             EVENT_MARKET_OPEN,
@@ -479,7 +505,7 @@ class ScheduledFeatures:
         await self._eod2_check_and_retry(retry_minutes)
 
     async def _eod2_check_and_retry(self, retry_minutes: int) -> None:
-        from .market import et_now
+        from .market import market_now
 
         sensor_id = self._opt(CONF_401K_SENSOR, "")
         state = self.hass.states.get(sensor_id)
@@ -499,7 +525,7 @@ class ScheduledFeatures:
                 change = 0
                 change_pct = 0
 
-            now = et_now(self.hass)
+            now = market_now(self.hass, self._tz)
             quiet_start = _parse_time(self._opt(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START))
             quiet_end = _parse_time(self._opt(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END))
             in_quiet = _in_quiet_hours(now.time(), quiet_start, quiet_end)

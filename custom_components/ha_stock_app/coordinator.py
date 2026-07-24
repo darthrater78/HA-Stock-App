@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_call_later
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
@@ -25,12 +26,14 @@ from .const import (
     CONF_ALERT_THRESHOLD,
     CONF_ENABLE_MARKET_HOURS,
     CONF_ENABLE_PAYCHECK_DETECTION,
+    CONF_MARKET_TIMEZONE,
     CONF_MONARCH_POLL_INTERVAL,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
     DEFAULT_ALERT_THRESHOLD,
     DEFAULT_ENABLE_MARKET_HOURS,
     DEFAULT_ENABLE_PAYCHECK_DETECTION,
+    DEFAULT_MARKET_TIMEZONE,
     DEFAULT_MONARCH_POLL_INTERVAL,
     DEFAULT_PAYCHECK_THRESHOLD,
     DEFAULT_PAYCHECK_WINDOWS,
@@ -41,7 +44,7 @@ from .const import (
 )
 from .providers import get_provider, StockQuote
 from .monarch import MonarchHolding
-from .market import et_now, in_pay_window, parse_pay_windows
+from .market import market_now, market_tz, in_pay_window, parse_pay_windows
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,6 +69,7 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
         self._market_hours_enabled = config.get(
             CONF_ENABLE_MARKET_HOURS, DEFAULT_ENABLE_MARKET_HOURS
         )
+        self._tz = market_tz(config.get(CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE))
 
         _LOGGER.info(
             "StockCoordinator initialized: poll every %ds, market hours gate %s, stocks %s",
@@ -87,11 +91,15 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
     def provider(self):
         return self._provider
 
+    @property
+    def market_tz(self):
+        return self._tz
+
     async def _async_update_data(self) -> dict[str, StockQuote]:
         _LOGGER.info("Stock poll triggered (interval=%ds)", self._poll_seconds)
         if self._market_hours_enabled:
             from .market import NYSECalendar
-            if not NYSECalendar.is_market_open(et_now(self.hass)):
+            if not NYSECalendar.is_market_open(market_now(self.hass, self._tz), self._tz):
                 _LOGGER.info("Market closed — returning cached data")
                 if self.data:
                     return self.data
@@ -230,7 +238,10 @@ class MonarchCoordinator(DataUpdateCoordinator):
             if self._previous_cash is not None:
                 delta = total_cash - self._previous_cash
                 if delta >= self._paycheck_threshold:
-                    day = et_now(self.hass).day
+                    # Pay windows are calendar days in the user's own
+                    # timezone -- paychecks have nothing to do with
+                    # trading hours, so the market zone is not used here.
+                    day = dt_util.now().day
                     paycheck_data = {
                         "amount": round(delta, 2),
                         "new_balance": round(total_cash, 2),

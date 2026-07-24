@@ -60,6 +60,7 @@
         "data": {
           "stocks": "Stock Symbols (comma-separated)",
           "poll_frequency": "Poll Frequency",
+          "market_timezone": "Market Timezone",
           "alert_threshold": "Alert Threshold (%)",
           "enable_market_hours": "Only poll during NYSE market hours",
           "enable_eod_summary": "End-of-day summary notification",
@@ -74,7 +75,8 @@
           "enable_paycheck_detection": "Detect paychecks from cash balance changes",
           "enable_401k_reporting": "401k delayed NAV reporting",
           "enable_debug_logging": "Enable debug logging"
-        }
+        },
+        "description": "Scheduled events (market open, end-of-day summary, API self-test) fire according to the market timezone below, independently of Home Assistant's own timezone. The holiday calendar is NYSE-specific and always applies."
       },
       "select_accounts": {
         "title": "Select Monarch Accounts",

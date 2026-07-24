@@ -30,6 +30,7 @@ from .const import (
     CONF_ENABLE_401K_REPORTING,
     CONF_ENABLE_PAYCHECK_DETECTION,
     CONF_ENABLE_DEBUG_LOGGING,
+    CONF_MARKET_TIMEZONE,
     CONF_MONARCH_POLL_INTERVAL,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
@@ -48,12 +49,14 @@ from .const import (
     DEFAULT_ENABLE_401K_REPORTING,
     DEFAULT_ENABLE_PAYCHECK_DETECTION,
     DEFAULT_ENABLE_DEBUG_LOGGING,
+    DEFAULT_MARKET_TIMEZONE,
     DEFAULT_MONARCH_POLL_INTERVAL,
     DEFAULT_PAYCHECK_THRESHOLD,
     DEFAULT_PAYCHECK_WINDOWS,
     DEFAULT_401K_QUIET_START,
     DEFAULT_401K_QUIET_END,
     DEFAULT_401K_RETRY_INTERVAL,
+    MARKET_TIMEZONES,
     PROVIDERS,
 )
 from .providers import get_provider, validate_symbols
@@ -313,6 +316,10 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                     CONF_ENABLE_FINNHUB_SELF_TEST: user_input.get(CONF_ENABLE_FINNHUB_SELF_TEST, DEFAULT_ENABLE_FINNHUB_SELF_TEST),
                 })
 
+                self._options[CONF_MARKET_TIMEZONE] = user_input.get(
+                    CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE
+                )
+
                 self._options[CONF_ENABLE_DEBUG_LOGGING] = user_input.get(
                     CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING
                 )
@@ -352,6 +359,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             vol.Optional(CONF_ALERT_THRESHOLD, default=current.get(CONF_ALERT_THRESHOLD, DEFAULT_ALERT_THRESHOLD)): vol.All(
                 vol.Coerce(float), vol.Range(min=0.1, max=100.0)
             ),
+            vol.Optional(CONF_MARKET_TIMEZONE, default=opts.get(CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE)): vol.In(MARKET_TIMEZONES),
             vol.Optional(CONF_ENABLE_MARKET_HOURS, default=opts.get(CONF_ENABLE_MARKET_HOURS, DEFAULT_ENABLE_MARKET_HOURS)): bool,
             vol.Optional(CONF_ENABLE_EOD_SUMMARY, default=opts.get(CONF_ENABLE_EOD_SUMMARY, DEFAULT_ENABLE_EOD_SUMMARY)): bool,
             vol.Optional(CONF_ENABLE_MARKET_OPEN_EVENT, default=opts.get(CONF_ENABLE_MARKET_OPEN_EVENT, DEFAULT_ENABLE_MARKET_OPEN_EVENT)): bool,
