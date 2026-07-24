@@ -31,6 +31,19 @@ def market_today(hass, tz: ZoneInfo | None = None) -> date:
     return market_now(hass, tz).date()
 
 
+def in_quiet_hours(now: time, start: time, end: time) -> bool:
+    """Whether now falls inside the quiet window.
+
+    The window wraps past midnight when start > end, which the default
+    22:00 -> 08:35 does. Compares full times so the minute component counts.
+    """
+    if start == end:
+        return False
+    if start < end:
+        return start <= now < end
+    return now >= start or now < end
+
+
 def next_market_time(
     now: datetime, hour: int, minute: int, tz: ZoneInfo
 ) -> datetime:

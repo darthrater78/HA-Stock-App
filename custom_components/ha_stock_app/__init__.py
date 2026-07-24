@@ -296,18 +296,6 @@ def _parse_time(t: str) -> dt_time:
     return dt_time(int(parts[0]), int(parts[1]))
 
 
-def _in_quiet_hours(now: dt_time, start: dt_time, end: dt_time) -> bool:
-    """Return True if now falls inside the quiet window.
-
-    The window wraps past midnight when start > end, which the default
-    22:00 -> 08:35 does. Compares full times so the minute component counts.
-    """
-    if start == end:
-        return False
-    if start < end:
-        return start <= now < end
-    return now >= start or now < end
-
 
 class ScheduledFeatures:
     def __init__(
@@ -474,13 +462,21 @@ class ScheduledFeatures:
 
             mc = self._monarch_coordinator
             if mc and mc.data:
-                for acct in mc.data.get("accounts", {}).values():
-                    if hasattr(acct, "name") and symbol.upper() in getattr(acct, "name", "").upper():
-                        if q.change_percent != 0:
-                            position_value = acct.balance
-                            day_pl = position_value * (q.change_percent / 100) / (1 + q.change_percent / 100)
-                            entry["position_value"] = round(position_value, 2)
-                            entry["day_pl"] = round(day_pl, 2)
+                # Match the holding by ticker rather than searching account names
+                # for the symbol: a one-letter ticker such as "A" was a substring
+                # of nearly every account name, and an account's balance is not
+                # the position's value in any case. Holdings carry both the
+                # ticker and the share count, so the day's P/L is exact rather
+                # than derived from a percentage.
+                held = [
+                    h for h in mc.data.get("holdings", {}).values()
+                    if (h.ticker or "").upper() == symbol.upper()
+                ]
+                if held:
+                    entry["position_value"] = round(sum(h.value for h in held), 2)
+                    entry["day_pl"] = round(sum(h.quantity for h in held) * q.change, 2)
+                    if len(held) > 1:
+                        entry["accounts"] = sorted({h.account_name for h in held})
 
             stocks[symbol] = entry
 
@@ -505,7 +501,7 @@ class ScheduledFeatures:
         await self._eod2_check_and_retry(retry_minutes)
 
     async def _eod2_check_and_retry(self, retry_minutes: int) -> None:
-        from .market import market_now
+        from .market import in_quiet_hours, market_now
 
         sensor_id = self._opt(CONF_401K_SENSOR, "")
         state = self.hass.states.get(sensor_id)
@@ -528,7 +524,7 @@ class ScheduledFeatures:
             now = market_now(self.hass, self._tz)
             quiet_start = _parse_time(self._opt(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START))
             quiet_end = _parse_time(self._opt(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END))
-            in_quiet = _in_quiet_hours(now.time(), quiet_start, quiet_end)
+            in_quiet = in_quiet_hours(now.time(), quiet_start, quiet_end)
 
             event_data = {
                 "sensor": sensor_id,

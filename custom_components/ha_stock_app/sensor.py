@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -15,7 +17,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import CONF_MONARCH_ACCOUNTS, DOMAIN
 from .coordinator import StockCoordinator, MonarchCoordinator
 from .market import NYSECalendar, market_now
-from .monarch import MonarchAccount, MonarchHolding
+
+if TYPE_CHECKING:
+    from .monarch import MonarchAccount, MonarchHolding
 
 
 def _device_info(entry: ConfigEntry) -> DeviceInfo:
@@ -56,7 +60,9 @@ async def async_setup_entry(
 
     monarch_data = monarch_coordinator.data if monarch_coordinator else None
     monarch_loaded = bool(monarch_data)
-    holdings_loaded = bool(monarch_data and monarch_data.get("holdings"))
+    # Authoritative only when every account's holdings actually came back; a
+    # partial fetch leaves gaps that must not be mistaken for removals.
+    holdings_loaded = bool(monarch_data) and monarch_data.get("holdings_complete", False)
     valid_unique_ids = {e.unique_id for e in entities}
 
     def _safe_to_remove(unique_id: str) -> bool:

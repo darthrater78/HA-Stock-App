@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import (
@@ -43,8 +43,10 @@ from .const import (
     EVENT_MONARCH_STATUS,
 )
 from .providers import get_provider, StockQuote
-from .monarch import MonarchHolding
 from .market import market_now, market_tz, in_pay_window, parse_pay_windows
+
+if TYPE_CHECKING:
+    from .monarch import MonarchHolding
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -219,8 +221,11 @@ class MonarchCoordinator(DataUpdateCoordinator):
 
         result["totals"] = by_type
 
+        from .monarch import MonarchHoldingsError
+
         _SKIP_TYPES = {"depository", "credit", "loan"}
         all_holdings: dict[str, MonarchHolding] = {}
+        holdings_complete = True
         for acct in accounts:
             type_lower = (acct.type_name or "").lower()
             if type_lower in _SKIP_TYPES:
@@ -233,15 +238,23 @@ class MonarchCoordinator(DataUpdateCoordinator):
                 "Fetching holdings for %s (%s) — type=%s",
                 acct.name, acct.id, acct.type_name,
             )
-            acct_holdings = await self._client.get_holdings(
-                acct.id, acct.name
-            )
+            try:
+                acct_holdings = await self._client.get_holdings(acct.id, acct.name)
+            except MonarchHoldingsError as exc:
+                # One account failing should not fail the whole refresh, but it
+                # does mean the holdings set is no longer authoritative -- so
+                # record that, or the entity cleanup would read the gap as a
+                # deletion and prune those sensors permanently.
+                holdings_complete = False
+                _LOGGER.warning("Monarch holdings unavailable for %s: %s", acct.name, exc)
+                continue
             _LOGGER.debug(
                 "Got %d holdings for %s", len(acct_holdings), acct.name,
             )
             for h in acct_holdings:
                 all_holdings[h.id] = h
         result["holdings"] = all_holdings
+        result["holdings_complete"] = holdings_complete
 
         if self._paycheck_enabled:
             total_cash = (
