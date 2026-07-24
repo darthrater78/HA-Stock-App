@@ -28,6 +28,7 @@ from .const import (
     CONF_ENABLE_401K_REPORTING,
     CONF_ENABLE_PAYCHECK_DETECTION,
     CONF_ENABLE_DEBUG_LOGGING,
+    CONF_NOTIFY_SERVICE,
     CONF_MONARCH_POLL_INTERVAL,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
@@ -46,6 +47,7 @@ from .const import (
     DEFAULT_ENABLE_401K_REPORTING,
     DEFAULT_ENABLE_PAYCHECK_DETECTION,
     DEFAULT_ENABLE_DEBUG_LOGGING,
+    DEFAULT_NOTIFY_SERVICE,
     DEFAULT_MONARCH_POLL_INTERVAL,
     DEFAULT_PAYCHECK_THRESHOLD,
     DEFAULT_PAYCHECK_WINDOWS,
@@ -287,6 +289,9 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                     CONF_ENABLE_FINNHUB_SELF_TEST: user_input.get(CONF_ENABLE_FINNHUB_SELF_TEST, DEFAULT_ENABLE_FINNHUB_SELF_TEST),
                 })
 
+                self._options[CONF_NOTIFY_SERVICE] = user_input.get(
+                    CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE
+                )
                 self._options[CONF_ENABLE_DEBUG_LOGGING] = user_input.get(
                     CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING
                 )
@@ -358,6 +363,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             })
 
         schema = schema.extend({
+            vol.Optional(CONF_NOTIFY_SERVICE, default=opts.get(CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE)): str,
             vol.Optional(CONF_ENABLE_DEBUG_LOGGING, default=opts.get(CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING)): bool,
         })
 

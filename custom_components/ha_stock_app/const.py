@@ -67,6 +67,8 @@ EVENT_FINNHUB_OK = f"{DOMAIN}_finnhub_ok"
 CONF_MONARCH_ACCOUNTS = "monarch_accounts"
 CONF_ENABLE_DEBUG_LOGGING = "enable_debug_logging"
 DEFAULT_ENABLE_DEBUG_LOGGING = False
+CONF_NOTIFY_SERVICE = "notify_service"
+DEFAULT_NOTIFY_SERVICE = ""
 
 PROVIDERS = {
     "finnhub": "Finnhub",

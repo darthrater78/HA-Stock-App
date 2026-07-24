@@ -13,11 +13,12 @@ A Home Assistant custom integration (HACS) for tracking stock prices and, option
 - **Finnhub self-test** — validates API connectivity once per trading day
 - **Manual refresh buttons** — button entities to trigger stock and Monarch data refreshes on demand
 - **Test notifications** — select a notification type from a dropdown and fire a test event, all from within the integration (no Developer Tools needed)
+- **Direct notifications** — configure a HA notify service in the options flow and all events are delivered as formatted mobile notifications (no Node-RED needed)
 - **Debug logging** — toggle verbose logging on/off from the options flow
 - **Device grouping** — all entities are grouped under a single HA Stock App device with proper `SensorDeviceClass.MONETARY` for currency display
 - Every feature above is independently toggleable through the config/options flow
 
-Node-RED is used only as a thin notification layer: it listens for `ha_stock_app_*` events on the HA event bus and formats/delivers mobile notifications. All business logic (gating, thresholds, scheduling) lives in the integration.
+Notifications can be delivered directly to any HA notify service (e.g. `notify.mobile_app_*`) — configure the target in the options flow. All events are also fired on the HA event bus (`ha_stock_app_*`) for use with Node-RED or automations.
 
 ## Installation
 
@@ -34,6 +35,16 @@ Configuration is entirely through the HA UI:
 5. Fine-tune feature toggles (market hours gating, EOD summary, 401k reporting, paycheck detection, debug logging, etc.) via the integration's **Configure** options
 
 ## Version History
+
+### v2.2.0 — 2026-07-24
+- Added direct notification delivery: configure a HA notify service (e.g. `notify.mobile_app_dad_pixel`) in the options flow and all events are pushed straight to your phone — no Node-RED required
+- Notifications are formatted per event type with color, channel, and priority (price alerts, EOD summary, market open, paycheck detected, 401k update, Finnhub status, Monarch status)
+- Events still fire on the HA bus for Node-RED / automation use
+
+### v2.1.3 — 2026-07-24
+- Fixed `state_class` warning: monetary sensors no longer set `MEASUREMENT` (only `TOTAL` or none)
+- Fixed blocking import warning on startup (`gql` now pre-imported off the event loop)
+- Fixed stale entities when accounts are deselected in options flow (entity registry cleanup)
 
 ### v2.1.2 — 2026-07-24
 - Fixed device_info using plain dict instead of DeviceInfo (broke entity setup on newer HA)
