@@ -35,6 +35,10 @@ Configuration is entirely through the HA UI:
 
 ## Version History
 
+### v2.1.1 — 2026-07-24
+- Fixed integration icon not showing (moved icon.png/logo.png into integration directory)
+- Fixed stock poll frequency not retaining selection in options flow
+
 ### v2.1.0 — 2026-07-24
 - Added account selection: choose which Monarch accounts to import (multi-select in both initial setup and options flow)
 - Added individual stock holding sensors for investment/brokerage/IRA accounts from Monarch
