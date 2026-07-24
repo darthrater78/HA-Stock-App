@@ -59,6 +59,22 @@ EVENT_FINNHUB_ERROR = f"{DOMAIN}_finnhub_error"
 EVENT_FINNHUB_OK = f"{DOMAIN}_finnhub_ok"
 EVENT_STOCK_UPDATE = f"{DOMAIN}_stock_update"
 
+CONF_MARKET_TIMEZONE = "market_timezone"
+DEFAULT_MARKET_TIMEZONE = "America/New_York"
+
+# The holiday calendar is NYSE-specific, so Eastern is the correct answer for
+# US equities. Exposed mainly so the assumption is visible and overridable.
+MARKET_TIMEZONES = {
+    "America/New_York": "Eastern — NYSE, NASDAQ (default)",
+    "America/Chicago": "Central — CME, CBOT",
+    "America/Los_Angeles": "Pacific",
+    "Europe/London": "London — LSE",
+    "Europe/Frankfurt": "Frankfurt — XETRA",
+    "Asia/Tokyo": "Tokyo — TSE",
+    "Australia/Sydney": "Sydney — ASX",
+    "UTC": "UTC",
+}
+
 CONF_MONARCH_ACCOUNTS = "monarch_accounts"
 CONF_ENABLE_DEBUG_LOGGING = "enable_debug_logging"
 DEFAULT_ENABLE_DEBUG_LOGGING = False

@@ -6,6 +6,7 @@ A Home Assistant custom integration (HACS) for tracking stock prices and, option
 
 - **Stock tracking** — add/remove tickers from the HA UI, pluggable price provider (Finnhub by default), configurable poll frequency
 - **Market-hours aware** — full NYSE holiday calendar (with early closes) gates polling and scheduled events, computed locally with no external dependency
+- **Timezone-correct scheduling** — a configurable market timezone (Eastern by default) drives every scheduled event, so they fire at the right moment whatever Home Assistant's own timezone is, and stay correct across DST
 - **Price alerts** — event fired when a symbol moves past a configurable threshold
 - **End-of-day summary** — fired at market close, including per-position P/L when Monarch is connected
 - **Monarch Money (optional)** — account balances, individual stock holdings within investment/brokerage/IRA accounts, paycheck detection, and a double-refresh workaround for a known Monarch API race condition. Selectable accounts let you import only what you need. Uses the unofficial [monarchmoney](https://github.com/hammem/monarchmoney) package; not affiliated with or endorsed by Monarch Money
@@ -14,10 +15,19 @@ A Home Assistant custom integration (HACS) for tracking stock prices and, option
 - **Manual refresh buttons** — button entities to trigger stock and Monarch data refreshes on demand
 - **Test notifications** — select a notification type from a dropdown and fire a test event, all from within the integration (no Developer Tools needed)
 - **Debug logging** — toggle verbose logging on/off from the options flow
+- **Diagnostics** — Market Status and Last Stock Poll sensors show at a glance whether the market is open and when prices last updated
+- **Logbook integration** — polls, price alerts, summaries and paycheck detection appear in the device's Activity tab
 - **Device grouping** — all entities are grouped under a single HA Stock App device with proper `SensorDeviceClass.MONETARY` for currency display
 - Every feature above is independently toggleable through the config/options flow
 
 All events are fired on the HA event bus (`ha_stock_app_*`) for use with Node-RED or automations to deliver mobile notifications.
+
+### Node-RED notifications (optional)
+
+`examples/node-red-notifications.json` is an importable Node-RED flow that turns
+these events into mobile notifications. Its formatting reproduces the standalone
+Node-RED engine this integration replaced, so alerts look the same as they did
+before. See [`examples/README.md`](examples/README.md) for setup.
 
 ## Installation
 
@@ -31,9 +41,41 @@ Configuration is entirely through the HA UI:
 2. Enter your stock provider API key and ticker symbols
 3. Optionally enable Monarch Money and provide credentials (with TOTP secret if MFA is enabled)
 4. Select which Monarch accounts to import (all selected by default)
-5. Fine-tune feature toggles (market hours gating, EOD summary, 401k reporting, paycheck detection, debug logging, etc.) via the integration's **Configure** options
+5. Fine-tune feature toggles (market hours gating, market timezone, EOD summary, 401k reporting, paycheck detection, debug logging, etc.) via the integration's **Configure** options
+
+## Development
+
+The market calendar, timezone handling, schedule resolution and quiet-hours logic
+are covered by tests that need no dependencies — `market.py` deliberately keeps
+Home Assistant out of its module scope:
+
+```bash
+python3 -m unittest discover tests
+```
 
 ## Version History
+
+### v2.3.0 — 2026-07-24
+- Fixed a typo in the quiet-hours or pay-window fields stopping the integration from loading. Both are free-form text; they now reject bad input in the form with an explanatory error, and fall back to the default at runtime instead of raising during setup. Pay-window days are range-checked too, so a value like `99-200` no longer parses cleanly while silently never matching
+- Fixed the Monarch double-refresh timer not being cancelled on unload, which left it to fire into a torn-down coordinator
+- Removed the superseded standalone Node-RED engine (`node-red-portfolio-flow-v2.json` and its add-ons). The integration has done that work since v2.0.0; the flows remain in git history
+- Added `examples/node-red-notifications.json`, an optional Node-RED flow that turns the integration's events into mobile notifications, formatted to match the engine it replaced
+- Added a test suite covering the market calendar, timezone handling, scheduling and quiet hours. It has no dependencies — run `python3 -m unittest discover tests`
+- Fixed end-of-day per-position P/L matching stocks by searching Monarch account *names* for the ticker. A one-letter ticker such as `A` was a substring of nearly every account name, and an account's balance was reported as the position's value. Positions are now matched against actual holdings by ticker, so the day's P/L is share count times per-share change rather than a figure derived from a percentage, and holdings split across accounts are summed
+- Fixed a failed holdings fetch being indistinguishable from an account holding nothing, which is what allowed a transient error to look like a deletion. The refresh still succeeds on a partial failure, but records that the holdings set is incomplete so the entity cleanup leaves those sensors alone
+- `monarchmoney` is now imported only when Monarch is actually enabled, so a stock-only install no longer loads it — and the "package not installed" messages became reachable for the first time
+- Corrected `hacs.json`, which still advertised only the `sensor` platform
+- Added a **Market Timezone** setting in the options flow. Scheduled events (market open, end-of-day summary, API self-test, 401k watch) now fire according to the market's clock regardless of Home Assistant's own timezone
+- Fixed those scheduled events firing at the wrong time on any non-Eastern Home Assistant. They were registered with `async_track_time_change`, which matches HA's local wall clock, while the market-hours and trading-day checks inside them used Eastern — so a Pacific install ran the end-of-day summary three hours after the close, and a UK install ran it mid-session. Each occurrence is now scheduled as an absolute instant and re-armed, which also keeps it correct across DST transitions in either timezone
+- Fixed a total quote-fetch failure being recorded as a successful poll. `get_quote` returns `None` instead of raising on an HTTP error, so a revoked or expired API key produced an empty result that looked identical to success — a fresh Last Stock Poll timestamp, no prices, and nothing reported as wrong. An empty result now fails the poll; a partial failure still succeeds but logs which symbols were missing
+- Paycheck pay-window matching now uses Home Assistant's local date rather than Eastern, since pay dates are unrelated to trading hours
+- Declared `monarchmoney==0.1.15` in the manifest so Home Assistant installs it. It was imported at module scope but never declared, so the integration only loaded on systems where another integration happened to pull the package in — and would fail to import at all on a clean install, even with Monarch disabled
+- Fixed a Monarch outage permanently deleting its sensors: if Monarch was unreachable at startup, the stale-entity cleanup treated every Monarch sensor as removed and deleted it from the entity registry, losing entity IDs, renames, areas and long-term statistics. Cleanup now only prunes entities it could actually evaluate, so deselecting an account still removes its sensor while an outage leaves them intact
+- Fixed a Monarch outage becoming permanent: `ConfigEntryNotReady` was caught by a broad `except Exception`, discarding Home Assistant's automatic retry. The coordinator is now kept on failure so the refresh button and the scheduled double-refresh recover it without a reload
+- Fixed 401k quiet hours ignoring the minute component and misfiring for windows that don't cross midnight — an update landing at 08:15 with a quiet end of 08:35 was released 20 minutes early, and a same-day window like 16:00–20:00 marked almost the whole day as quiet
+- Fixed the Last Stock Poll sensor raising `AttributeError`: `last_update_success_time` is only provided by `TimestampDataUpdateCoordinator`, which `StockCoordinator` now extends
+- Fixed the setup wizard aborting with an unknown-error screen when the stock API test timed out — timeouts now route to the existing retry step
+- Added a 15-second timeout to Finnhub requests (previously the aiohttp default of 5 minutes)
 
 ### v2.2.3 — 2026-07-24
 - Added logbook platform — integration events (stock polls, price alerts, EOD summaries, paycheck detection, etc.) now appear in the device Activity tab

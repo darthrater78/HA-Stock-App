@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import (
+    DataUpdateCoordinator,
+    TimestampDataUpdateCoordinator,
+    UpdateFailed,
+)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_call_later
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
@@ -21,12 +26,14 @@ from .const import (
     CONF_ALERT_THRESHOLD,
     CONF_ENABLE_MARKET_HOURS,
     CONF_ENABLE_PAYCHECK_DETECTION,
+    CONF_MARKET_TIMEZONE,
     CONF_MONARCH_POLL_INTERVAL,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
     DEFAULT_ALERT_THRESHOLD,
     DEFAULT_ENABLE_MARKET_HOURS,
     DEFAULT_ENABLE_PAYCHECK_DETECTION,
+    DEFAULT_MARKET_TIMEZONE,
     DEFAULT_MONARCH_POLL_INTERVAL,
     DEFAULT_PAYCHECK_THRESHOLD,
     DEFAULT_PAYCHECK_WINDOWS,
@@ -36,8 +43,10 @@ from .const import (
     EVENT_MONARCH_STATUS,
 )
 from .providers import get_provider, StockQuote
-from .monarch import MonarchHolding
-from .market import et_now, in_pay_window, parse_pay_windows
+from .market import market_now, market_tz, in_pay_window, parse_pay_windows
+
+if TYPE_CHECKING:
+    from .monarch import MonarchHolding
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,7 +57,7 @@ def _strip_sensitive(config: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in config.items() if k not in SENSITIVE_KEYS}
 
 
-class StockCoordinator(DataUpdateCoordinator):
+class StockCoordinator(TimestampDataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, config: dict[str, Any]) -> None:
         self._config = _strip_sensitive(config)
         self._provider = get_provider(
@@ -62,6 +71,7 @@ class StockCoordinator(DataUpdateCoordinator):
         self._market_hours_enabled = config.get(
             CONF_ENABLE_MARKET_HOURS, DEFAULT_ENABLE_MARKET_HOURS
         )
+        self._tz = market_tz(config.get(CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE))
 
         _LOGGER.info(
             "StockCoordinator initialized: poll every %ds, market hours gate %s, stocks %s",
@@ -83,11 +93,15 @@ class StockCoordinator(DataUpdateCoordinator):
     def provider(self):
         return self._provider
 
+    @property
+    def market_tz(self):
+        return self._tz
+
     async def _async_update_data(self) -> dict[str, StockQuote]:
         _LOGGER.info("Stock poll triggered (interval=%ds)", self._poll_seconds)
         if self._market_hours_enabled:
             from .market import NYSECalendar
-            if not NYSECalendar.is_market_open(et_now(self.hass)):
+            if not NYSECalendar.is_market_open(market_now(self.hass, self._tz), self._tz):
                 _LOGGER.info("Market closed — returning cached data")
                 if self.data:
                     return self.data
@@ -96,6 +110,21 @@ class StockCoordinator(DataUpdateCoordinator):
             quotes = await self._provider.get_quotes(self.stocks)
         except Exception as exc:
             raise UpdateFailed("Stock data fetch failed") from exc
+
+        if self.stocks and not quotes:
+            # get_quote returns None rather than raising on an HTTP error, so a
+            # wholesale failure arrives here as an empty dict and is otherwise
+            # indistinguishable from success. Unflagged, a revoked API key would
+            # keep recording healthy polls -- fresh Last Stock Poll timestamp,
+            # no prices, and no failure surfaced anywhere.
+            raise UpdateFailed(
+                f"No quotes returned for any of the {len(self.stocks)} configured symbols"
+            )
+
+        if missing := [s for s in self.stocks if s not in quotes]:
+            # A partial failure still leaves usable data, so this stays a
+            # warning rather than failing the whole poll.
+            _LOGGER.warning("No quote returned for: %s", ", ".join(missing))
 
         prices = {s: round(q.current_price, 2) for s, q in quotes.items()}
         _LOGGER.info("Stock poll complete: %s", {s: f"${p:.2f}" for s, p in prices.items()})
@@ -158,7 +187,16 @@ class MonarchCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(minutes=poll_minutes),
         )
 
+    @callback
+    def async_cancel_pending(self) -> None:
+        """Cancel a deferred second refresh, if one is armed."""
+        if self._double_refresh_unsub is not None:
+            self._double_refresh_unsub()
+            self._double_refresh_unsub = None
+
     async def async_trigger_double_refresh(self) -> None:
+        # Re-arming without cancelling would orphan the previous timer.
+        self.async_cancel_pending()
         await self.async_request_refresh()
 
         @callback
@@ -192,8 +230,11 @@ class MonarchCoordinator(DataUpdateCoordinator):
 
         result["totals"] = by_type
 
+        from .monarch import MonarchHoldingsError
+
         _SKIP_TYPES = {"depository", "credit", "loan"}
         all_holdings: dict[str, MonarchHolding] = {}
+        holdings_complete = True
         for acct in accounts:
             type_lower = (acct.type_name or "").lower()
             if type_lower in _SKIP_TYPES:
@@ -206,15 +247,23 @@ class MonarchCoordinator(DataUpdateCoordinator):
                 "Fetching holdings for %s (%s) — type=%s",
                 acct.name, acct.id, acct.type_name,
             )
-            acct_holdings = await self._client.get_holdings(
-                acct.id, acct.name
-            )
+            try:
+                acct_holdings = await self._client.get_holdings(acct.id, acct.name)
+            except MonarchHoldingsError as exc:
+                # One account failing should not fail the whole refresh, but it
+                # does mean the holdings set is no longer authoritative -- so
+                # record that, or the entity cleanup would read the gap as a
+                # deletion and prune those sensors permanently.
+                holdings_complete = False
+                _LOGGER.warning("Monarch holdings unavailable for %s: %s", acct.name, exc)
+                continue
             _LOGGER.debug(
                 "Got %d holdings for %s", len(acct_holdings), acct.name,
             )
             for h in acct_holdings:
                 all_holdings[h.id] = h
         result["holdings"] = all_holdings
+        result["holdings_complete"] = holdings_complete
 
         if self._paycheck_enabled:
             total_cash = (
@@ -226,7 +275,10 @@ class MonarchCoordinator(DataUpdateCoordinator):
             if self._previous_cash is not None:
                 delta = total_cash - self._previous_cash
                 if delta >= self._paycheck_threshold:
-                    day = et_now(self.hass).day
+                    # Pay windows are calendar days in the user's own
+                    # timezone -- paychecks have nothing to do with
+                    # trading hours, so the market zone is not used here.
+                    day = dt_util.now().day
                     paycheck_data = {
                         "amount": round(delta, 2),
                         "new_balance": round(total_cash, 2),

@@ -1,27 +1,113 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, time, timedelta
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+_LOGGER = logging.getLogger(__name__)
 
 ET = ZoneInfo("America/New_York")
 
 
-def et_now(hass) -> datetime:
+def market_tz(name: str | None = None) -> ZoneInfo:
+    """Resolve a configured IANA zone name, falling back to Eastern."""
+    if not name:
+        return ET
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        _LOGGER.warning(
+            "Unknown market timezone %r; falling back to America/New_York", name
+        )
+        return ET
+
+
+def market_now(hass, tz: ZoneInfo | None = None) -> datetime:
     from homeassistant.util import dt as dt_util
-    return dt_util.now().astimezone(ET)
+    return dt_util.now().astimezone(tz or ET)
 
 
-def today_et(hass) -> date:
-    return et_now(hass).date()
+def market_today(hass, tz: ZoneInfo | None = None) -> date:
+    return market_now(hass, tz).date()
+
+
+def in_quiet_hours(now: time, start: time, end: time) -> bool:
+    """Whether now falls inside the quiet window.
+
+    The window wraps past midnight when start > end, which the default
+    22:00 -> 08:35 does. Compares full times so the minute component counts.
+    """
+    if start == end:
+        return False
+    if start < end:
+        return start <= now < end
+    return now >= start or now < end
+
+
+def next_market_time(
+    now: datetime, hour: int, minute: int, tz: ZoneInfo
+) -> datetime:
+    """Next absolute instant at which the market clock reads hour:minute.
+
+    Resolved a calendar day at a time in the market zone rather than by adding
+    24 hours, so the result stays correct across DST transitions -- in either
+    the market's zone or Home Assistant's, which need not shift on the same
+    date. A wall time that does not exist on a spring-forward day resolves to
+    the following instant rather than being skipped.
+    """
+    local = now.astimezone(tz)
+    for offset in range(3):
+        day = (local + timedelta(days=offset)).date()
+        candidate = datetime(day.year, day.month, day.day, hour, minute, tzinfo=tz)
+        if candidate > now:
+            return candidate
+    return now + timedelta(days=1)
+
+
+def parse_time_of_day(value: str, default: str = "00:00") -> time:
+    """Parse "HH:MM" from a free-form config field.
+
+    The options flow accepts these as plain text, so a typo must not be able to
+    take the integration down: an unparseable value falls back to the supplied
+    default with a warning rather than raising during setup.
+    """
+    for candidate, is_fallback in ((value, False), (default, True)):
+        parts = str(candidate or "").strip().split(":")
+        try:
+            return time(int(parts[0]), int(parts[1]))
+        except (IndexError, ValueError):
+            if not is_fallback:
+                _LOGGER.warning(
+                    "Invalid time of day %r; falling back to %r", value, default
+                )
+    return time(0, 0)
 
 
 def parse_pay_windows(windows_str: str) -> list[tuple[int, int]]:
-    result = []
-    for part in windows_str.split(","):
+    """Parse "27-5,11-19" into inclusive day-of-month ranges.
+
+    Also free-form, so a malformed segment is skipped with a warning rather
+    than raising. Days are range-checked too: "99-200" parsed cleanly before
+    but could never match a real date, silently disabling pay-window matching.
+    """
+    result: list[tuple[int, int]] = []
+    for part in str(windows_str or "").split(","):
         part = part.strip()
-        if "-" in part:
-            a, b = part.split("-", 1)
-            result.append((int(a.strip()), int(b.strip())))
+        if not part:
+            continue
+        bits = part.split("-")
+        if len(bits) != 2:
+            _LOGGER.warning("Ignoring malformed pay window %r", part)
+            continue
+        try:
+            start, end = int(bits[0].strip()), int(bits[1].strip())
+        except ValueError:
+            _LOGGER.warning("Ignoring malformed pay window %r", part)
+            continue
+        if not (1 <= start <= 31 and 1 <= end <= 31):
+            _LOGGER.warning("Ignoring out-of-range pay window %r", part)
+            continue
+        result.append((start, end))
     return result
 
 
@@ -123,10 +209,10 @@ class NYSECalendar:
         return time(9, 30)
 
     @staticmethod
-    def is_market_open(dt: datetime) -> bool:
-        et = dt.astimezone(ET)
-        d = et.date()
+    def is_market_open(dt: datetime, tz: ZoneInfo | None = None) -> bool:
+        local = dt.astimezone(tz or ET)
+        d = local.date()
         if not NYSECalendar.is_trading_day(d):
             return False
-        t = et.time()
+        t = local.time()
         return NYSECalendar.market_open_time() <= t < NYSECalendar.market_close_time(d)

@@ -12,6 +12,10 @@ _LOGGER = logging.getLogger(__name__)
 
 SYMBOL_PATTERN = re.compile(r"^[A-Z0-9.\-]{1,10}$")
 
+# Keep well under the aiohttp default (5 minutes) so a hung request can't
+# stall a poll cycle or leave the config flow spinning.
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=15)
+
 
 @dataclass
 class StockQuote:
@@ -74,7 +78,9 @@ class FinnhubProvider(StockProvider):
         params = {"symbol": symbol.upper()}
         headers = {"X-Finnhub-Token": self._api_key}
         try:
-            async with self._session.get(url, params=params, headers=headers) as resp:
+            async with self._session.get(
+                url, params=params, headers=headers, timeout=REQUEST_TIMEOUT
+            ) as resp:
                 if resp.status != 200:
                     _LOGGER.error("Finnhub API error %s for %s", resp.status, symbol)
                     return None
@@ -90,7 +96,9 @@ class FinnhubProvider(StockProvider):
                     low=float(data["l"]),
                     open_price=float(data["o"]),
                 )
-        except (aiohttp.ClientError, KeyError, ValueError) as exc:
+        # A total-request timeout surfaces as TimeoutError, which is not an
+        # aiohttp.ClientError, so it needs to be caught explicitly.
+        except (aiohttp.ClientError, TimeoutError, KeyError, ValueError) as exc:
             _LOGGER.error("Finnhub fetch failed for %s: %s", symbol, type(exc).__name__)
             return None
 

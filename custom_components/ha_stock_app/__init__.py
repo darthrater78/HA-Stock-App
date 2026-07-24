@@ -6,8 +6,9 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback, CALLBACK_TYPE
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.event import async_track_time_change, async_call_later
+from homeassistant.helpers.event import async_call_later, async_track_point_in_time
 
 import voluptuous as vol
 
@@ -23,6 +24,7 @@ from .const import (
     CONF_ENABLE_401K_REPORTING,
     CONF_ENABLE_PAYCHECK_DETECTION,
     CONF_ENABLE_DEBUG_LOGGING,
+    CONF_MARKET_TIMEZONE,
     CONF_MONARCH_POLL_INTERVAL,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
@@ -38,6 +40,7 @@ from .const import (
     DEFAULT_ENABLE_401K_REPORTING,
     DEFAULT_ENABLE_PAYCHECK_DETECTION,
     DEFAULT_ENABLE_DEBUG_LOGGING,
+    DEFAULT_MARKET_TIMEZONE,
     DEFAULT_MONARCH_POLL_INTERVAL,
     DEFAULT_PAYCHECK_THRESHOLD,
     DEFAULT_PAYCHECK_WINDOWS,
@@ -74,6 +77,7 @@ OPTION_DEFAULTS = {
     CONF_401K_QUIET_END: DEFAULT_401K_QUIET_END,
     CONF_401K_RETRY_INTERVAL: DEFAULT_401K_RETRY_INTERVAL,
     CONF_ENABLE_DEBUG_LOGGING: DEFAULT_ENABLE_DEBUG_LOGGING,
+    CONF_MARKET_TIMEZONE: DEFAULT_MARKET_TIMEZONE,
 }
 
 
@@ -132,6 +136,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.warning(
                 "Monarch Money enabled but monarchmoney package not installed. "
                 "Install it with: pip install monarchmoney"
+            )
+        except ConfigEntryNotReady:
+            # async_config_entry_first_refresh raises this when Monarch is
+            # unreachable or rejects the credentials. It is deliberately not
+            # re-raised: Monarch is optional here, and propagating it would put
+            # the whole entry into setup-retry, taking stock tracking down with
+            # it. The coordinator is still stored so the refresh button and the
+            # scheduled double-refresh can recover it without a reload -- and so
+            # the sensor platform can tell "temporarily unavailable" apart from
+            # "removed" when it prunes stale entities.
+            data["monarch_coordinator"] = monarch_coordinator
+            _LOGGER.warning(
+                "Monarch Money is not reachable; continuing without it. "
+                "Its sensors are preserved and will recover on the next refresh"
+            )
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                monarch_issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="monarch_auth_failed",
             )
         except (OSError, PermissionError) as exc:
             _LOGGER.error("Monarch Money file/permission error: %s", type(exc).__name__)
@@ -259,15 +285,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         scheduler = entry_data.get("scheduler")
         if scheduler:
             scheduler.cancel_all()
+        monarch_coordinator = entry_data.get("monarch_coordinator")
+        if monarch_coordinator:
+            # Otherwise a double refresh armed in the last four minutes fires
+            # into a coordinator that has already been torn down.
+            monarch_coordinator.async_cancel_pending()
         ir.async_delete_issue(hass, DOMAIN, f"monarch_auth_failed_{entry.entry_id}")
         if not hass.data[DOMAIN]:
             hass.services.async_remove(DOMAIN, "test_notification")
     return unload_ok
-
-
-def _parse_time(t: str) -> dt_time:
-    parts = t.split(":")
-    return dt_time(int(parts[0]), int(parts[1]))
 
 
 class ScheduledFeatures:
@@ -288,6 +314,9 @@ class ScheduledFeatures:
         config = _merged_config(entry)
         self._config = config
 
+        from .market import market_tz
+        self._tz = market_tz(config.get(CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE))
+
     def _opt(self, key: str, default: Any = None) -> Any:
         return self._config.get(key, default)
 
@@ -299,8 +328,43 @@ class ScheduledFeatures:
     def _monarch_coordinator(self):
         return self._data.get("monarch_coordinator")
 
+    def _schedule_daily(self, hour: int, minute: int, handler: Any) -> None:
+        """Run handler each trading day at hour:minute in the market timezone.
+
+        async_track_time_change cannot express this: it matches Home Assistant's
+        local wall clock, and the offset to the market's clock shifts with DST --
+        the two zones need not even change on the same date. So each occurrence
+        is scheduled as an absolute instant and re-armed once it fires.
+        """
+        from .market import NYSECalendar, market_now, market_today, next_market_time
+
+        holder: list[CALLBACK_TYPE | None] = [None]
+
+        @callback
+        def _arm() -> None:
+            target = next_market_time(
+                market_now(self.hass, self._tz), hour, minute, self._tz
+            )
+            holder[0] = async_track_point_in_time(self.hass, _fired, target)
+
+        async def _fired(_now) -> None:
+            holder[0] = None
+            _arm()  # re-arm first, so a failing handler cannot break the chain
+            if NYSECalendar.is_trading_day(market_today(self.hass, self._tz)):
+                await handler()
+
+        _arm()
+
+        @callback
+        def _cancel() -> None:
+            if holder[0] is not None:
+                holder[0]()
+                holder[0] = None
+
+        self._unsubs.append(_cancel)
+
     def register(self) -> None:
-        from .market import NYSECalendar, et_now, today_et
+        from .market import parse_time_of_day
 
         schedules: list[tuple[int, int, str, Any]] = [
             (9, 15, CONF_ENABLE_FINNHUB_SELF_TEST, self._finnhub_self_test),
@@ -322,8 +386,9 @@ class ScheduledFeatures:
 
         if self._opt(CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING):
             schedules.append((16, 5, CONF_ENABLE_401K_REPORTING, self._eod2_start_watch))
-            quiet_end = _parse_time(
-                self._opt(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END)
+            quiet_end = parse_time_of_day(
+                self._opt(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END),
+                DEFAULT_401K_QUIET_END,
             )
             schedules.append(
                 (quiet_end.hour, quiet_end.minute, CONF_ENABLE_401K_REPORTING, self._eod2_morning_release)
@@ -332,20 +397,7 @@ class ScheduledFeatures:
         for hour, minute, toggle_key, handler in schedules:
             if not self._opt(toggle_key, OPTION_DEFAULTS.get(toggle_key, False)):
                 continue
-
-            @callback
-            def _make_cb(h=handler):
-                async def _cb(_now):
-                    from .market import NYSECalendar, today_et
-                    if not NYSECalendar.is_trading_day(today_et(self.hass)):
-                        return
-                    await h()
-                return _cb
-
-            unsub = async_track_time_change(
-                self.hass, _make_cb(), hour=hour, minute=minute, second=0
-            )
-            self._unsubs.append(unsub)
+            self._schedule_daily(hour, minute, handler)
 
     def cancel_all(self) -> None:
         for unsub in self._unsubs:
@@ -380,8 +432,8 @@ class ScheduledFeatures:
             )
 
     async def _market_open_notify(self) -> None:
-        from .market import NYSECalendar, today_et
-        d = today_et(self.hass)
+        from .market import NYSECalendar, market_today
+        d = market_today(self.hass, self._tz)
         close = NYSECalendar.market_close_time(d)
         self.hass.bus.async_fire(
             EVENT_MARKET_OPEN,
@@ -412,13 +464,21 @@ class ScheduledFeatures:
 
             mc = self._monarch_coordinator
             if mc and mc.data:
-                for acct in mc.data.get("accounts", {}).values():
-                    if hasattr(acct, "name") and symbol.upper() in getattr(acct, "name", "").upper():
-                        if q.change_percent != 0:
-                            position_value = acct.balance
-                            day_pl = position_value * (q.change_percent / 100) / (1 + q.change_percent / 100)
-                            entry["position_value"] = round(position_value, 2)
-                            entry["day_pl"] = round(day_pl, 2)
+                # Match the holding by ticker rather than searching account names
+                # for the symbol: a one-letter ticker such as "A" was a substring
+                # of nearly every account name, and an account's balance is not
+                # the position's value in any case. Holdings carry both the
+                # ticker and the share count, so the day's P/L is exact rather
+                # than derived from a percentage.
+                held = [
+                    h for h in mc.data.get("holdings", {}).values()
+                    if (h.ticker or "").upper() == symbol.upper()
+                ]
+                if held:
+                    entry["position_value"] = round(sum(h.value for h in held), 2)
+                    entry["day_pl"] = round(sum(h.quantity for h in held) * q.change, 2)
+                    if len(held) > 1:
+                        entry["accounts"] = sorted({h.account_name for h in held})
 
             stocks[symbol] = entry
 
@@ -443,7 +503,7 @@ class ScheduledFeatures:
         await self._eod2_check_and_retry(retry_minutes)
 
     async def _eod2_check_and_retry(self, retry_minutes: int) -> None:
-        from .market import et_now
+        from .market import in_quiet_hours, market_now, parse_time_of_day
 
         sensor_id = self._opt(CONF_401K_SENSOR, "")
         state = self.hass.states.get(sensor_id)
@@ -463,10 +523,16 @@ class ScheduledFeatures:
                 change = 0
                 change_pct = 0
 
-            now = et_now(self.hass)
-            quiet_start = _parse_time(self._opt(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START))
-            quiet_end = _parse_time(self._opt(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END))
-            in_quiet = now.hour >= quiet_start.hour or now.hour < quiet_end.hour
+            now = market_now(self.hass, self._tz)
+            quiet_start = parse_time_of_day(
+                self._opt(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START),
+                DEFAULT_401K_QUIET_START,
+            )
+            quiet_end = parse_time_of_day(
+                self._opt(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END),
+                DEFAULT_401K_QUIET_END,
+            )
+            in_quiet = in_quiet_hours(now.time(), quiet_start, quiet_end)
 
             event_data = {
                 "sensor": sensor_id,

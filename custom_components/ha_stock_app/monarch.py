@@ -11,6 +11,15 @@ from monarchmoney import MonarchMoney, RequireMFAException
 _LOGGER = logging.getLogger(__name__)
 
 
+class MonarchHoldingsError(Exception):
+    """An account's holdings could not be retrieved.
+
+    Distinct from an account genuinely holding nothing, which is an empty
+    list. Callers need to tell the two apart: treating a failed fetch as
+    "no holdings" is what let a transient error look like a deletion.
+    """
+
+
 @dataclass
 class MonarchAccount:
     id: str
@@ -140,7 +149,9 @@ class MonarchClient:
     async def get_holdings(self, account_id: str, account_name: str = "") -> list[MonarchHolding]:
         if self._mm is None:
             if not await self.authenticate():
-                return []
+                raise MonarchHoldingsError(
+                    f"not authenticated while fetching holdings for {account_id}"
+                )
         try:
             try:
                 acct_id = int(account_id)
@@ -197,13 +208,10 @@ class MonarchClient:
                 )
             return holdings
         except Exception as exc:
-            _LOGGER.error(
-                "Monarch holdings fetch failed for account %s: %s",
-                account_id,
-                type(exc).__name__,
-            )
             _LOGGER.debug("Monarch holdings failure details", exc_info=True)
-            return []
+            raise MonarchHoldingsError(
+                f"holdings fetch failed for account {account_id}: {type(exc).__name__}"
+            ) from exc
 
     async def get_cashflow_summary(self) -> dict:
         if self._mm is None:

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import logging
+import re
+
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -28,6 +31,7 @@ from .const import (
     CONF_ENABLE_401K_REPORTING,
     CONF_ENABLE_PAYCHECK_DETECTION,
     CONF_ENABLE_DEBUG_LOGGING,
+    CONF_MARKET_TIMEZONE,
     CONF_MONARCH_POLL_INTERVAL,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
@@ -46,15 +50,28 @@ from .const import (
     DEFAULT_ENABLE_401K_REPORTING,
     DEFAULT_ENABLE_PAYCHECK_DETECTION,
     DEFAULT_ENABLE_DEBUG_LOGGING,
+    DEFAULT_MARKET_TIMEZONE,
     DEFAULT_MONARCH_POLL_INTERVAL,
     DEFAULT_PAYCHECK_THRESHOLD,
     DEFAULT_PAYCHECK_WINDOWS,
     DEFAULT_401K_QUIET_START,
     DEFAULT_401K_QUIET_END,
     DEFAULT_401K_RETRY_INTERVAL,
+    MARKET_TIMEZONES,
     PROVIDERS,
 )
 from .providers import get_provider, validate_symbols
+
+_LOGGER = logging.getLogger(__name__)
+
+TIME_OF_DAY = re.compile(r"^([01]?\d|2[0-3]):[0-5]\d$")
+
+
+def _invalid_pay_windows(value: str) -> bool:
+    """Whether a pay-window string has no usable segment."""
+    from .market import parse_pay_windows
+
+    return bool(str(value or "").strip()) and not parse_pay_windows(value)
 
 POLL_OPTIONS = {
     "60": "1 minute",
@@ -130,7 +147,13 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         test_symbol = self._data[CONF_STOCKS][0]
-        quote = await provider.get_quote(test_symbol)
+        try:
+            quote = await provider.get_quote(test_symbol)
+        except Exception:
+            # Any failure here must land on the retry step rather than
+            # aborting the flow with an unhandled-error screen.
+            _LOGGER.exception("Stock API test failed for %s", test_symbol)
+            quote = None
 
         if quote is None:
             return self.async_show_form(
@@ -303,6 +326,10 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                     CONF_ENABLE_FINNHUB_SELF_TEST: user_input.get(CONF_ENABLE_FINNHUB_SELF_TEST, DEFAULT_ENABLE_FINNHUB_SELF_TEST),
                 })
 
+                self._options[CONF_MARKET_TIMEZONE] = user_input.get(
+                    CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE
+                )
+
                 self._options[CONF_ENABLE_DEBUG_LOGGING] = user_input.get(
                     CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING
                 )
@@ -342,6 +369,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             vol.Optional(CONF_ALERT_THRESHOLD, default=current.get(CONF_ALERT_THRESHOLD, DEFAULT_ALERT_THRESHOLD)): vol.All(
                 vol.Coerce(float), vol.Range(min=0.1, max=100.0)
             ),
+            vol.Optional(CONF_MARKET_TIMEZONE, default=opts.get(CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE)): vol.In(MARKET_TIMEZONES),
             vol.Optional(CONF_ENABLE_MARKET_HOURS, default=opts.get(CONF_ENABLE_MARKET_HOURS, DEFAULT_ENABLE_MARKET_HOURS)): bool,
             vol.Optional(CONF_ENABLE_EOD_SUMMARY, default=opts.get(CONF_ENABLE_EOD_SUMMARY, DEFAULT_ENABLE_EOD_SUMMARY)): bool,
             vol.Optional(CONF_ENABLE_MARKET_OPEN_EVENT, default=opts.get(CONF_ENABLE_MARKET_OPEN_EVENT, DEFAULT_ENABLE_MARKET_OPEN_EVENT)): bool,
@@ -415,7 +443,19 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_advanced(self, user_input=None):
+        errors = {}
         if user_input is not None:
+            # Both of these are free-form text. Reject a typo here rather than
+            # letting it reach the parsers, which fall back silently.
+            if self._options.get(CONF_ENABLE_401K_REPORTING, False):
+                for key in (CONF_401K_QUIET_START, CONF_401K_QUIET_END):
+                    if not TIME_OF_DAY.match(str(user_input.get(key, "")).strip()):
+                        errors[key] = "invalid_time"
+            if self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False):
+                if _invalid_pay_windows(user_input.get(CONF_PAYCHECK_WINDOWS, "")):
+                    errors[CONF_PAYCHECK_WINDOWS] = "invalid_pay_windows"
+
+        if user_input is not None and not errors:
             if self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False):
                 self._options[CONF_PAYCHECK_THRESHOLD] = user_input.get(
                     CONF_PAYCHECK_THRESHOLD, DEFAULT_PAYCHECK_THRESHOLD
@@ -457,4 +497,5 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="advanced",
             data_schema=vol.Schema(schema_dict),
+            errors=errors,
         )
