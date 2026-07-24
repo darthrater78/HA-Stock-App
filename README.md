@@ -13,12 +13,11 @@ A Home Assistant custom integration (HACS) for tracking stock prices and, option
 - **Finnhub self-test** — validates API connectivity once per trading day
 - **Manual refresh buttons** — button entities to trigger stock and Monarch data refreshes on demand
 - **Test notifications** — select a notification type from a dropdown and fire a test event, all from within the integration (no Developer Tools needed)
-- **Direct notifications** — configure a HA notify service in the options flow and all events are delivered as formatted mobile notifications (no Node-RED needed)
 - **Debug logging** — toggle verbose logging on/off from the options flow
 - **Device grouping** — all entities are grouped under a single HA Stock App device with proper `SensorDeviceClass.MONETARY` for currency display
 - Every feature above is independently toggleable through the config/options flow
 
-Notifications can be delivered directly to any HA notify service (e.g. `notify.mobile_app_*`) — configure the target in the options flow. All events are also fired on the HA event bus (`ha_stock_app_*`) for use with Node-RED or automations.
+All events are fired on the HA event bus (`ha_stock_app_*`) for use with Node-RED or automations to deliver mobile notifications.
 
 ## Installation
 
@@ -36,10 +35,12 @@ Configuration is entirely through the HA UI:
 
 ## Version History
 
-### v2.2.0 — 2026-07-24
-- Added direct notification delivery: configure a HA notify service (e.g. `notify.mobile_app_dad_pixel`) in the options flow and all events are pushed straight to your phone — no Node-RED required
-- Notifications are formatted per event type with color, channel, and priority (price alerts, EOD summary, market open, paycheck detected, 401k update, Finnhub status, Monarch status)
-- Events still fire on the HA bus for Node-RED / automation use
+### v2.2.1 — 2026-07-24
+- Reverted direct notification delivery (back to Node-RED for notifications)
+- Fixed poll frequency not persisting: added `vol.Coerce(int)` to all integer dropdown selectors (poll frequency, Monarch poll interval, 401k retry interval) — HA frontend sends JSON string keys, which silently failed `vol.In` validation against integer keys
+- Fixed missing log entries: changed default log level from WARNING to INFO so operational messages (poll results, coordinator startup, market hours gating) appear in the HA system log
+- Added startup log showing configured poll interval and market hours gate status
+- Added per-poll log showing fetched prices
 
 ### v2.1.3 — 2026-07-24
 - Fixed `state_class` warning: monetary sensors no longer set `MEASUREMENT` (only `TOTAL` or none)

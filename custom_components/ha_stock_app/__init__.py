@@ -52,9 +52,7 @@ from .const import (
     EVENT_PRICE_ALERT,
     EVENT_PAYCHECK_DETECTED,
 )
-from .const import CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE
 from .coordinator import StockCoordinator
-from .notify import async_send_notification
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,7 +74,6 @@ OPTION_DEFAULTS = {
     CONF_401K_QUIET_END: DEFAULT_401K_QUIET_END,
     CONF_401K_RETRY_INTERVAL: DEFAULT_401K_RETRY_INTERVAL,
     CONF_ENABLE_DEBUG_LOGGING: DEFAULT_ENABLE_DEBUG_LOGGING,
-    CONF_NOTIFY_SERVICE: DEFAULT_NOTIFY_SERVICE,
 }
 
 
@@ -110,7 +107,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ha_stock_logger.setLevel(logging.DEBUG)
         _LOGGER.info("Debug logging enabled for HA Stock App")
     else:
-        ha_stock_logger.setLevel(logging.WARNING)
+        ha_stock_logger.setLevel(logging.INFO)
 
     stock_coordinator = StockCoordinator(hass, config)
     await stock_coordinator.async_config_entry_first_refresh()
@@ -246,12 +243,6 @@ def _register_services(hass: HomeAssistant) -> None:
         event_name, event_data = _TEST_EVENTS[notification_type]
         data = {**event_data, "test": True}
         hass.bus.async_fire(event_name, data)
-        for entry_id, entry_data in hass.data.get(DOMAIN, {}).items():
-            scheduler = entry_data.get("scheduler")
-            if scheduler:
-                notify_svc = scheduler._opt(CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE)
-                if notify_svc:
-                    await async_send_notification(hass, notify_svc, event_name, data)
         _LOGGER.info("Fired test event: %s", event_name)
 
     hass.services.async_register(
@@ -299,12 +290,6 @@ class ScheduledFeatures:
 
     def _opt(self, key: str, default: Any = None) -> Any:
         return self._config.get(key, default)
-
-    async def _fire_and_notify(self, event_type: str, event_data: dict[str, Any]) -> None:
-        self.hass.bus.async_fire(event_type, event_data)
-        notify_svc = self._opt(CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE)
-        if notify_svc:
-            await async_send_notification(self.hass, notify_svc, event_type, event_data)
 
     @property
     def _stock_coordinator(self) -> StockCoordinator:
@@ -379,17 +364,17 @@ class ScheduledFeatures:
         try:
             quote = await provider.get_quote(symbol)
             if quote:
-                await self._fire_and_notify(
+                self.hass.bus.async_fire(
                     EVENT_FINNHUB_OK,
                     {"symbol": symbol, "price": quote.current_price},
                 )
             else:
-                await self._fire_and_notify(
+                self.hass.bus.async_fire(
                     EVENT_FINNHUB_ERROR,
                     {"error": "No quote returned", "symbol": symbol},
                 )
         except Exception as exc:
-            await self._fire_and_notify(
+            self.hass.bus.async_fire(
                 EVENT_FINNHUB_ERROR,
                 {"error": type(exc).__name__, "symbol": symbol},
             )
@@ -398,7 +383,7 @@ class ScheduledFeatures:
         from .market import NYSECalendar, today_et
         d = today_et(self.hass)
         close = NYSECalendar.market_close_time(d)
-        await self._fire_and_notify(
+        self.hass.bus.async_fire(
             EVENT_MARKET_OPEN,
             {
                 "date": d.isoformat(),
@@ -437,7 +422,7 @@ class ScheduledFeatures:
 
             stocks[symbol] = entry
 
-        await self._fire_and_notify(EVENT_EOD_SUMMARY, {"stocks": stocks})
+        self.hass.bus.async_fire(EVENT_EOD_SUMMARY, {"stocks": stocks})
 
     async def _eod2_start_watch(self) -> None:
         sensor_id = self._opt(CONF_401K_SENSOR, "")
@@ -496,7 +481,7 @@ class ScheduledFeatures:
                 self._eod2_deferred = event_data
                 _LOGGER.debug("401k update detected during quiet hours, deferring")
             else:
-                await self._fire_and_notify(EVENT_EOD2_SUMMARY, event_data)
+                self.hass.bus.async_fire(EVENT_EOD2_SUMMARY, event_data)
                 self._eod2_deferred = None
             return
 
@@ -518,5 +503,5 @@ class ScheduledFeatures:
     async def _eod2_morning_release(self) -> None:
         if self._eod2_deferred:
             self._eod2_deferred["deferred"] = False
-            await self._fire_and_notify(EVENT_EOD2_SUMMARY, self._eod2_deferred)
+            self.hass.bus.async_fire(EVENT_EOD2_SUMMARY, self._eod2_deferred)
             self._eod2_deferred = None

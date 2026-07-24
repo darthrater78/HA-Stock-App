@@ -28,7 +28,6 @@ from .const import (
     CONF_ENABLE_401K_REPORTING,
     CONF_ENABLE_PAYCHECK_DETECTION,
     CONF_ENABLE_DEBUG_LOGGING,
-    CONF_NOTIFY_SERVICE,
     CONF_MONARCH_POLL_INTERVAL,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
@@ -47,7 +46,6 @@ from .const import (
     DEFAULT_ENABLE_401K_REPORTING,
     DEFAULT_ENABLE_PAYCHECK_DETECTION,
     DEFAULT_ENABLE_DEBUG_LOGGING,
-    DEFAULT_NOTIFY_SERVICE,
     DEFAULT_MONARCH_POLL_INTERVAL,
     DEFAULT_PAYCHECK_THRESHOLD,
     DEFAULT_PAYCHECK_WINDOWS,
@@ -94,13 +92,15 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_API_PROVIDER, default=DEFAULT_PROVIDER): vol.In(PROVIDERS),
                 vol.Required(CONF_API_KEY): str,
                 vol.Required(CONF_STOCKS, default="VOO, VTI"): str,
-                vol.Optional(CONF_POLL_FREQUENCY, default=DEFAULT_POLL_FREQUENCY): vol.In({
-                    60: "1 minute",
-                    300: "5 minutes",
-                    600: "10 minutes",
-                    900: "15 minutes",
-                    1800: "30 minutes",
-                }),
+                vol.Optional(CONF_POLL_FREQUENCY, default=DEFAULT_POLL_FREQUENCY): vol.All(
+                    vol.Coerce(int), vol.In({
+                        60: "1 minute",
+                        300: "5 minutes",
+                        600: "10 minutes",
+                        900: "15 minutes",
+                        1800: "30 minutes",
+                    }),
+                ),
                 vol.Optional(CONF_ALERT_THRESHOLD, default=DEFAULT_ALERT_THRESHOLD): vol.All(
                     vol.Coerce(float), vol.Range(min=0.1, max=100.0)
                 ),
@@ -289,9 +289,6 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                     CONF_ENABLE_FINNHUB_SELF_TEST: user_input.get(CONF_ENABLE_FINNHUB_SELF_TEST, DEFAULT_ENABLE_FINNHUB_SELF_TEST),
                 })
 
-                self._options[CONF_NOTIFY_SERVICE] = user_input.get(
-                    CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE
-                )
                 self._options[CONF_ENABLE_DEBUG_LOGGING] = user_input.get(
                     CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING
                 )
@@ -327,13 +324,15 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
 
         schema = vol.Schema({
             vol.Required(CONF_STOCKS, default=", ".join(current.get(CONF_STOCKS, []))): str,
-            vol.Required(CONF_POLL_FREQUENCY, default=saved_poll): vol.In({
-                60: "1 minute",
-                300: "5 minutes",
-                600: "10 minutes",
-                900: "15 minutes",
-                1800: "30 minutes",
-            }),
+            vol.Required(CONF_POLL_FREQUENCY, default=saved_poll): vol.All(
+                vol.Coerce(int), vol.In({
+                    60: "1 minute",
+                    300: "5 minutes",
+                    600: "10 minutes",
+                    900: "15 minutes",
+                    1800: "30 minutes",
+                }),
+            ),
             vol.Optional(CONF_ALERT_THRESHOLD, default=current.get(CONF_ALERT_THRESHOLD, DEFAULT_ALERT_THRESHOLD)): vol.All(
                 vol.Coerce(float), vol.Range(min=0.1, max=100.0)
             ),
@@ -350,20 +349,21 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         if current.get(CONF_MONARCH_ENABLED, False):
             monarch_poll = opts.get(CONF_MONARCH_POLL_INTERVAL) or current.get(CONF_MONARCH_POLL_INTERVAL) or DEFAULT_MONARCH_POLL_INTERVAL
             schema = schema.extend({
-                vol.Required(CONF_MONARCH_POLL_INTERVAL, default=monarch_poll): vol.In({
-                    5: "5 minutes",
-                    10: "10 minutes",
-                    15: "15 minutes",
-                    30: "30 minutes",
-                    60: "1 hour",
-                }),
+                vol.Required(CONF_MONARCH_POLL_INTERVAL, default=monarch_poll): vol.All(
+                    vol.Coerce(int), vol.In({
+                        5: "5 minutes",
+                        10: "10 minutes",
+                        15: "15 minutes",
+                        30: "30 minutes",
+                        60: "1 hour",
+                    }),
+                ),
                 vol.Optional(CONF_ENABLE_MONARCH_DOUBLE_REFRESH, default=opts.get(CONF_ENABLE_MONARCH_DOUBLE_REFRESH, DEFAULT_ENABLE_MONARCH_DOUBLE_REFRESH)): bool,
                 vol.Optional(CONF_ENABLE_PAYCHECK_DETECTION, default=opts.get(CONF_ENABLE_PAYCHECK_DETECTION, DEFAULT_ENABLE_PAYCHECK_DETECTION)): bool,
                 vol.Optional(CONF_ENABLE_401K_REPORTING, default=opts.get(CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING)): bool,
             })
 
         schema = schema.extend({
-            vol.Optional(CONF_NOTIFY_SERVICE, default=opts.get(CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE)): str,
             vol.Optional(CONF_ENABLE_DEBUG_LOGGING, default=opts.get(CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING)): bool,
         })
 
@@ -454,11 +454,13 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             schema_dict[vol.Optional(CONF_401K_QUIET_START, default=opts.get(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START))] = str
             schema_dict[vol.Optional(CONF_401K_QUIET_END, default=opts.get(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END))] = str
             saved_retry = opts.get(CONF_401K_RETRY_INTERVAL) or DEFAULT_401K_RETRY_INTERVAL
-            schema_dict[vol.Required(CONF_401K_RETRY_INTERVAL, default=saved_retry)] = vol.In({
-                15: "15 minutes",
-                30: "30 minutes",
-                60: "1 hour",
-            })
+            schema_dict[vol.Required(CONF_401K_RETRY_INTERVAL, default=saved_retry)] = vol.All(
+                vol.Coerce(int), vol.In({
+                    15: "15 minutes",
+                    30: "30 minutes",
+                    60: "1 hour",
+                }),
+            )
 
         return self.async_show_form(
             step_id="advanced",
