@@ -74,7 +74,6 @@
           "enable_monarch_double_refresh": "Double-refresh at open/close (workaround)",
           "enable_paycheck_detection": "Detect paychecks from cash balance changes",
           "enable_401k_reporting": "401k delayed NAV reporting",
-          "notify_service": "Notification Service (e.g. notify.mobile_app_dad_pixel)",
           "enable_debug_logging": "Enable debug logging"
         }
       },

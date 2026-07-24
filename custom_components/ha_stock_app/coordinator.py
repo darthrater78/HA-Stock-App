@@ -34,11 +34,9 @@ from .const import (
     EVENT_PAYCHECK_DETECTED,
     EVENT_MONARCH_STATUS,
 )
-from .const import CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE
 from .providers import get_provider, StockQuote
 from .monarch import MonarchHolding
 from .market import et_now, in_pay_window, parse_pay_windows
-from .notify import async_send_notification
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,11 +57,15 @@ class StockCoordinator(DataUpdateCoordinator):
         )
         self._previous_prices: dict[str, float] = {}
         self._alert_threshold = config.get(CONF_ALERT_THRESHOLD, DEFAULT_ALERT_THRESHOLD)
-        self._poll_seconds = config[CONF_POLL_FREQUENCY]
+        self._poll_seconds = int(config[CONF_POLL_FREQUENCY])
         self._market_hours_enabled = config.get(
             CONF_ENABLE_MARKET_HOURS, DEFAULT_ENABLE_MARKET_HOURS
         )
-        self._notify_service = config.get(CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE)
+
+        _LOGGER.info(
+            "StockCoordinator initialized: poll every %ds, market hours gate %s, stocks %s",
+            self._poll_seconds, "ON" if self._market_hours_enabled else "OFF", self.stocks,
+        )
 
         super().__init__(
             hass,
@@ -84,15 +86,16 @@ class StockCoordinator(DataUpdateCoordinator):
         if self._market_hours_enabled:
             from .market import NYSECalendar
             if not NYSECalendar.is_market_open(et_now(self.hass)):
+                _LOGGER.debug("Market closed — returning cached data")
                 if self.data:
                     return self.data
-                # First poll ever — fetch once even if market closed
-                # so sensors have initial values
 
         try:
             quotes = await self._provider.get_quotes(self.stocks)
         except Exception as exc:
             raise UpdateFailed("Stock data fetch failed") from exc
+
+        _LOGGER.info("Stock poll complete: %s", {s: f"${q.current_price:.2f}" for s, q in quotes.items()})
 
         for symbol, quote in quotes.items():
             prev = self._previous_prices.get(symbol)
@@ -107,10 +110,6 @@ class StockCoordinator(DataUpdateCoordinator):
                         "direction": "up" if quote.current_price > prev else "down",
                     }
                     self.hass.bus.async_fire(EVENT_PRICE_ALERT, alert_data)
-                    if self._notify_service:
-                        await async_send_notification(
-                            self.hass, self._notify_service, EVENT_PRICE_ALERT, alert_data
-                        )
             self._previous_prices[symbol] = quote.current_price
 
         return quotes
@@ -142,7 +141,11 @@ class MonarchCoordinator(DataUpdateCoordinator):
         self._pay_windows = parse_pay_windows(
             config.get(CONF_PAYCHECK_WINDOWS, DEFAULT_PAYCHECK_WINDOWS)
         )
-        self._notify_service = config.get(CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE)
+
+        _LOGGER.info(
+            "MonarchCoordinator initialized: poll every %dm, paycheck detection %s",
+            poll_minutes, "ON" if self._paycheck_enabled else "OFF",
+        )
 
         super().__init__(
             hass,
@@ -170,10 +173,6 @@ class MonarchCoordinator(DataUpdateCoordinator):
         if is_available != self._was_available:
             status_data = {"status": "online" if is_available else "offline"}
             self.hass.bus.async_fire(EVENT_MONARCH_STATUS, status_data)
-            if self._notify_service:
-                await async_send_notification(
-                    self.hass, self._notify_service, EVENT_MONARCH_STATUS, status_data
-                )
             self._was_available = is_available
 
         if not accounts:
@@ -230,10 +229,6 @@ class MonarchCoordinator(DataUpdateCoordinator):
                         "in_pay_window": in_pay_window(day, self._pay_windows),
                     }
                     self.hass.bus.async_fire(EVENT_PAYCHECK_DETECTED, paycheck_data)
-                    if self._notify_service:
-                        await async_send_notification(
-                            self.hass, self._notify_service, EVENT_PAYCHECK_DETECTED, paycheck_data
-                        )
             self._previous_cash = total_cash
 
         return result
