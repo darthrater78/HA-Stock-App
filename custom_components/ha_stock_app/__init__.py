@@ -9,6 +9,8 @@ from homeassistant.core import HomeAssistant, callback, CALLBACK_TYPE
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_track_time_change, async_call_later
 
+import voluptuous as vol
+
 from .const import (
     DOMAIN,
     PLATFORMS,
@@ -20,6 +22,7 @@ from .const import (
     CONF_ENABLE_MONARCH_DOUBLE_REFRESH,
     CONF_ENABLE_401K_REPORTING,
     CONF_ENABLE_PAYCHECK_DETECTION,
+    CONF_ENABLE_DEBUG_LOGGING,
     CONF_MONARCH_POLL_INTERVAL,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
@@ -34,6 +37,7 @@ from .const import (
     DEFAULT_ENABLE_MONARCH_DOUBLE_REFRESH,
     DEFAULT_ENABLE_401K_REPORTING,
     DEFAULT_ENABLE_PAYCHECK_DETECTION,
+    DEFAULT_ENABLE_DEBUG_LOGGING,
     DEFAULT_MONARCH_POLL_INTERVAL,
     DEFAULT_PAYCHECK_THRESHOLD,
     DEFAULT_PAYCHECK_WINDOWS,
@@ -45,6 +49,8 @@ from .const import (
     EVENT_EOD2_SUMMARY,
     EVENT_FINNHUB_ERROR,
     EVENT_FINNHUB_OK,
+    EVENT_PRICE_ALERT,
+    EVENT_PAYCHECK_DETECTED,
 )
 from .coordinator import StockCoordinator
 
@@ -67,6 +73,7 @@ OPTION_DEFAULTS = {
     CONF_401K_QUIET_START: DEFAULT_401K_QUIET_START,
     CONF_401K_QUIET_END: DEFAULT_401K_QUIET_END,
     CONF_401K_RETRY_INTERVAL: DEFAULT_401K_RETRY_INTERVAL,
+    CONF_ENABLE_DEBUG_LOGGING: DEFAULT_ENABLE_DEBUG_LOGGING,
 }
 
 
@@ -95,10 +102,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     config = _merged_config(entry)
 
+    ha_stock_logger = logging.getLogger("custom_components.ha_stock_app")
+    if config.get(CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING):
+        ha_stock_logger.setLevel(logging.DEBUG)
+        _LOGGER.info("Debug logging enabled for HA Stock App")
+    else:
+        ha_stock_logger.setLevel(logging.WARNING)
+
     stock_coordinator = StockCoordinator(hass, config)
     await stock_coordinator.async_config_entry_first_refresh()
 
-    data: dict = {"stock_coordinator": stock_coordinator}
+    data: dict = {
+        "stock_coordinator": stock_coordinator,
+        "test_notification_type": "eod_summary",
+    }
 
     monarch_issue_id = f"monarch_auth_failed_{entry.entry_id}"
 
@@ -145,11 +162,93 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = data
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
+    if not hass.services.has_service(DOMAIN, "test_notification"):
+        _register_services(hass)
+
     return True
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+_TEST_EVENTS = {
+    "eod_summary": (
+        EVENT_EOD_SUMMARY,
+        {
+            "stocks": {
+                "VOO": {
+                    "price": 523.45,
+                    "change": 2.15,
+                    "change_pct": 0.41,
+                    "position_value": 52345.00,
+                    "day_pl": 215.00,
+                },
+                "VTI": {
+                    "price": 275.80,
+                    "change": -1.30,
+                    "change_pct": -0.47,
+                },
+            }
+        },
+    ),
+    "market_open": (
+        EVENT_MARKET_OPEN,
+        {"date": "2026-07-24", "early_close": False, "close_time": "16:00"},
+    ),
+    "price_alert": (
+        EVENT_PRICE_ALERT,
+        {
+            "symbol": "VOO",
+            "price": 530.00,
+            "previous": 523.45,
+            "change_pct": 1.25,
+            "direction": "up",
+        },
+    ),
+    "paycheck_detected": (
+        EVENT_PAYCHECK_DETECTED,
+        {"amount": 4250.00, "new_balance": 12500.00, "in_pay_window": True},
+    ),
+    "eod2_summary": (
+        EVENT_EOD2_SUMMARY,
+        {
+            "sensor": "sensor.monarch_holding_401k",
+            "previous_value": 98500.00,
+            "new_value": 98850.00,
+            "day_change": 350.00,
+            "day_change_pct": 0.36,
+            "deferred": False,
+        },
+    ),
+    "finnhub_error": (
+        EVENT_FINNHUB_ERROR,
+        {"error": "ClientResponseError", "symbol": "VOO"},
+    ),
+    "finnhub_ok": (
+        EVENT_FINNHUB_OK,
+        {"symbol": "VOO", "price": 523.45},
+    ),
+}
+
+
+def _register_services(hass: HomeAssistant) -> None:
+    async def handle_test_notification(call) -> None:
+        notification_type = call.data.get("type", "")
+        if notification_type not in _TEST_EVENTS:
+            _LOGGER.warning("Unknown test notification type: %s", notification_type)
+            return
+        event_name, event_data = _TEST_EVENTS[notification_type]
+        hass.bus.async_fire(event_name, {**event_data, "test": True})
+        _LOGGER.info("Fired test event: %s", event_name)
+
+    hass.services.async_register(
+        DOMAIN,
+        "test_notification",
+        handle_test_notification,
+        schema=vol.Schema({vol.Required("type"): str}),
+    )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -159,6 +258,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if scheduler:
             scheduler.cancel_all()
         ir.async_delete_issue(hass, DOMAIN, f"monarch_auth_failed_{entry.entry_id}")
+        if not hass.data[DOMAIN]:
+            hass.services.async_remove(DOMAIN, "test_notification")
     return unload_ok
 
 

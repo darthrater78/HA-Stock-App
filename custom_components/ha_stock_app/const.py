@@ -1,5 +1,5 @@
 DOMAIN = "ha_stock_app"
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "button", "select"]
 
 CONF_STOCKS = "stocks"
 CONF_API_PROVIDER = "api_provider"
@@ -63,6 +63,10 @@ EVENT_MARKET_OPEN = f"{DOMAIN}_market_open"
 EVENT_EOD2_SUMMARY = f"{DOMAIN}_eod2_summary"
 EVENT_FINNHUB_ERROR = f"{DOMAIN}_finnhub_error"
 EVENT_FINNHUB_OK = f"{DOMAIN}_finnhub_ok"
+
+CONF_MONARCH_ACCOUNTS = "monarch_accounts"
+CONF_ENABLE_DEBUG_LOGGING = "enable_debug_logging"
+DEFAULT_ENABLE_DEBUG_LOGGING = False
 
 PROVIDERS = {
     "finnhub": "Finnhub",

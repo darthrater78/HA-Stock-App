@@ -19,6 +19,21 @@ class MonarchAccount:
     balance: float
     account_type: str
     subtype: str
+    type_name: str = ""
+
+
+@dataclass
+class MonarchHolding:
+    id: str
+    ticker: str
+    name: str
+    quantity: float
+    value: float
+    cost_basis: float
+    price: float
+    one_day_change_pct: float
+    account_id: str
+    account_name: str
 
 
 class MonarchClient:
@@ -112,6 +127,7 @@ class MonarchClient:
                         balance=float(acct.get("currentBalance", 0)),
                         account_type=acct.get("type", {}).get("display", "Unknown"),
                         subtype=acct.get("subtype", {}).get("display", ""),
+                        type_name=acct.get("type", {}).get("name", ""),
                     )
                 )
             return accounts
@@ -119,6 +135,64 @@ class MonarchClient:
             _LOGGER.error("Monarch Money fetch failed: %s", type(exc).__name__)
             _LOGGER.debug("Monarch Money fetch failure details", exc_info=True)
             self._mm = None
+            return []
+
+    async def get_holdings(self, account_id: str, account_name: str = "") -> list[MonarchHolding]:
+        if self._mm is None:
+            if not await self.authenticate():
+                return []
+        try:
+            try:
+                acct_id = int(account_id)
+            except (ValueError, TypeError):
+                acct_id = account_id
+            data = await self._mm.get_account_holdings(acct_id)
+            holdings: list[MonarchHolding] = []
+            edges = (
+                data.get("portfolio", {})
+                .get("aggregateHoldings", {})
+                .get("edges", [])
+            )
+            for edge in edges:
+                node = edge.get("node", {})
+                security = node.get("security") or {}
+                ticker = security.get("ticker", "")
+                if not ticker:
+                    for h in node.get("holdings", []):
+                        if h.get("ticker"):
+                            ticker = h["ticker"]
+                            break
+                name = security.get("name", "")
+                if not name and node.get("holdings"):
+                    name = node["holdings"][0].get("name", "Unknown")
+                holdings.append(
+                    MonarchHolding(
+                        id=str(node.get("id", "")),
+                        ticker=ticker or "N/A",
+                        name=name or "Unknown",
+                        quantity=float(node.get("quantity", 0)),
+                        value=float(node.get("totalValue", 0)),
+                        cost_basis=float(node.get("basis") or 0),
+                        price=float(
+                            security.get("currentPrice")
+                            or security.get("closingPrice")
+                            or 0
+                        ),
+                        one_day_change_pct=float(
+                            security.get("oneDayChangePercent") or 0
+                        ),
+                        account_id=str(account_id),
+                        account_name=account_name,
+                    )
+                )
+            return holdings
+        except Exception as exc:
+            _LOGGER.error(
+                "Monarch holdings fetch failed for account %s: %s",
+                account_id,
+                type(exc).__name__,
+            )
+            _LOGGER.debug("Monarch holdings failure details", exc_info=True)
             return []
 
     async def get_cashflow_summary(self) -> dict:

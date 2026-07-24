@@ -35,6 +35,7 @@ from .const import (
     EVENT_MONARCH_STATUS,
 )
 from .providers import get_provider, StockQuote
+from .monarch import MonarchHolding
 from .market import et_now, in_pay_window, parse_pay_windows
 
 _LOGGER = logging.getLogger(__name__)
@@ -179,6 +180,18 @@ class MonarchCoordinator(DataUpdateCoordinator):
             by_type[acct.account_type] += acct.balance
 
         result["totals"] = by_type
+
+        _SKIP_TYPES = {"depository", "credit", "loan"}
+        all_holdings: dict[str, MonarchHolding] = {}
+        for acct in accounts:
+            if acct.type_name in _SKIP_TYPES:
+                continue
+            acct_holdings = await self._client.get_holdings(
+                acct.id, acct.name
+            )
+            for h in acct_holdings:
+                all_holdings[h.id] = h
+        result["holdings"] = all_holdings
 
         if self._paycheck_enabled:
             total_cash = (

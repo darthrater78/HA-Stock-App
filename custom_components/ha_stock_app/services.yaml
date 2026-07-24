@@ -1,0 +1,25 @@
+test_notification:
+  name: Send Test Notification
+  description: Fire a test HA Stock App event to verify your Node-RED notification flows are working.
+  fields:
+    type:
+      name: Notification Type
+      description: Which notification event to fire with sample data.
+      required: true
+      selector:
+        select:
+          options:
+            - label: "End-of-Day Summary"
+              value: "eod_summary"
+            - label: "Market Open"
+              value: "market_open"
+            - label: "Price Alert"
+              value: "price_alert"
+            - label: "Paycheck Detected"
+              value: "paycheck_detected"
+            - label: "401k Update"
+              value: "eod2_summary"
+            - label: "Finnhub API Error"
+              value: "finnhub_error"
+            - label: "Finnhub API OK"
+              value: "finnhub_ok"
