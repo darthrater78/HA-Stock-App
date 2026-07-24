@@ -7,6 +7,6 @@
   "documentation": "https://github.com/darthrater78/HA-Stock-App",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/darthrater78/HA-Stock-App/issues",
-  "requirements": ["aiohttp>=3.8.0"],
+  "requirements": ["aiohttp>=3.8.0", "monarchmoney==0.1.15"],
   "version": "2.2.4"
 }
