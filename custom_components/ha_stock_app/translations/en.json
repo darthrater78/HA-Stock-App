@@ -82,5 +82,15 @@
         }
       }
     }
+  },
+  "issues": {
+    "monarch_auth_failed": {
+      "title": "Monarch Money connection failed",
+      "description": "HA Stock App could not authenticate with Monarch Money when this entry was set up or last reloaded. This is often caused by MFA being required but no TOTP secret configured, or credentials changing since setup. Stock price tracking is unaffected and continues normally.\n\nTo fix: open this integration's **Configure** options, re-enter your Monarch email/password (and TOTP secret if your account uses MFA), then reload the integration."
+    },
+    "monarch_file_error": {
+      "title": "Monarch Money session storage error",
+      "description": "HA Stock App could not read or write its Monarch Money session file. Check that Home Assistant has permission to write to its `.storage` directory, then reload the integration."
+    }
   }
 }

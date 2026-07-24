@@ -6,6 +6,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback, CALLBACK_TYPE
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_track_time_change, async_call_later
 
 from .const import (
@@ -99,6 +100,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     data: dict = {"stock_coordinator": stock_coordinator}
 
+    monarch_issue_id = f"monarch_auth_failed_{entry.entry_id}"
+
     if config.get(CONF_MONARCH_ENABLED):
         try:
             from .coordinator import MonarchCoordinator
@@ -106,6 +109,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             monarch_coordinator = MonarchCoordinator(hass, config)
             await monarch_coordinator.async_config_entry_first_refresh()
             data["monarch_coordinator"] = monarch_coordinator
+            ir.async_delete_issue(hass, DOMAIN, monarch_issue_id)
         except ImportError:
             _LOGGER.warning(
                 "Monarch Money enabled but monarchmoney package not installed. "
@@ -113,8 +117,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
         except (OSError, PermissionError) as exc:
             _LOGGER.error("Monarch Money file/permission error: %s", type(exc).__name__)
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                monarch_issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="monarch_file_error",
+            )
         except Exception:
             _LOGGER.exception("Unexpected error initializing Monarch Money coordinator")
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                monarch_issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="monarch_auth_failed",
+            )
+    else:
+        ir.async_delete_issue(hass, DOMAIN, monarch_issue_id)
 
     scheduler = ScheduledFeatures(hass, entry, data)
     scheduler.register()
@@ -136,6 +158,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         scheduler = entry_data.get("scheduler")
         if scheduler:
             scheduler.cancel_all()
+        ir.async_delete_issue(hass, DOMAIN, f"monarch_auth_failed_{entry.entry_id}")
     return unload_ok
 
 
