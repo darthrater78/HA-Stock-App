@@ -35,6 +35,11 @@ Configuration is entirely through the HA UI:
 
 ## Version History
 
+### v2.1.2 — 2026-07-24
+- Fixed device_info using plain dict instead of DeviceInfo (broke entity setup on newer HA)
+- Fixed holdings type filter to be case-insensitive (brokerage/IRA accounts were silently skipped)
+- Added debug logging to holdings fetch for troubleshooting
+
 ### v2.1.1 — 2026-07-24
 - Fixed integration icon not showing (moved icon.png/logo.png into integration directory)
 - Fixed stock poll frequency not retaining selection in options flow
