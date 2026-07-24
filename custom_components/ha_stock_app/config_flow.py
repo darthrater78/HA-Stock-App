@@ -320,7 +320,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
 
         schema_dict = {
             vol.Required(CONF_STOCKS, default=", ".join(current.get(CONF_STOCKS, []))): str,
-            vol.Optional(CONF_POLL_FREQUENCY, default=current.get(CONF_POLL_FREQUENCY, DEFAULT_POLL_FREQUENCY)): vol.In({
+            vol.Required(CONF_POLL_FREQUENCY, default=opts.get(CONF_POLL_FREQUENCY) or current.get(CONF_POLL_FREQUENCY) or DEFAULT_POLL_FREQUENCY): vol.In({
                 60: "1 minute",
                 300: "5 minutes",
                 600: "10 minutes",
