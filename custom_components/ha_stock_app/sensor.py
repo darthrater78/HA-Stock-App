@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_MONARCH_ACCOUNTS, DOMAIN
 from .coordinator import StockCoordinator, MonarchCoordinator
+from .market import NYSECalendar, et_now
 from .monarch import MonarchAccount, MonarchHolding
 
 
@@ -36,6 +37,8 @@ async def async_setup_entry(
     selected_accounts = entry.data.get(CONF_MONARCH_ACCOUNTS, [])
 
     stock_coordinator: StockCoordinator = data["stock_coordinator"]
+    entities.append(MarketStatusSensor(stock_coordinator, entry))
+    entities.append(LastPollSensor(stock_coordinator, entry))
     for symbol in stock_coordinator.stocks:
         entities.append(StockPriceSensor(stock_coordinator, symbol, entry))
 
@@ -172,6 +175,67 @@ class MonarchHoldingSensor(CoordinatorEntity, SensorEntity):
             attrs["gain_loss_pct"] = round(gain_pct, 2)
         if holding.one_day_change_pct:
             attrs["one_day_change_pct"] = round(holding.one_day_change_pct, 2)
+        return attrs
+
+
+class LastPollSensor(CoordinatorEntity, SensorEntity):
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:clock-outline"
+
+    def __init__(self, coordinator: StockCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{DOMAIN}_last_poll"
+        self._attr_name = "Last Stock Poll"
+        self._attr_device_info = _device_info(entry)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self):
+        if self.coordinator.last_update_success_time:
+            return self.coordinator.last_update_success_time
+        return None
+
+
+class MarketStatusSensor(CoordinatorEntity, SensorEntity):
+    _attr_icon = "mdi:chart-line"
+
+    def __init__(self, coordinator: StockCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{DOMAIN}_market_status"
+        self._attr_name = "Market Status"
+        self._attr_device_info = _device_info(entry)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str:
+        now = et_now(self.hass)
+        d = now.date()
+        if d.weekday() >= 5:
+            return "Closed - Weekend"
+        if not NYSECalendar.is_trading_day(d):
+            return "Closed - Holiday"
+        t = now.time()
+        close_time = NYSECalendar.market_close_time(d)
+        open_time = NYSECalendar.market_open_time()
+        if open_time <= t < close_time:
+            if close_time.hour == 13:
+                return "Early Close"
+            return "Open"
+        return "Closed - After Hours"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        now = et_now(self.hass)
+        d = now.date()
+        attrs = {"trading_day": NYSECalendar.is_trading_day(d)}
+        if NYSECalendar.is_trading_day(d):
+            attrs["close_time"] = NYSECalendar.market_close_time(d).strftime("%H:%M")
         return attrs
 
 
