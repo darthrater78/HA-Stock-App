@@ -53,6 +53,15 @@ sections:
         grid_options:
           columns: 12
           rows: 1
+        entity: button.ha_stock_app_401k_update
+        vertical: false
+        features:
+          - type: button
+        features_position: inline
+      - type: tile
+        grid_options:
+          columns: 12
+          rows: 1
         entity: button.ha_stock_app_send_test_notification
         vertical: false
         features:

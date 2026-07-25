@@ -7,7 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, device_info
+from .const import CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING, DOMAIN, device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,6 +22,13 @@ async def async_setup_entry(
 
     if data.get("monarch_coordinator"):
         entities.append(RefreshMonarchButton(entry))
+
+    scheduler = data.get("scheduler")
+    eod2_enabled = entry.options.get(
+        CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING
+    )
+    if scheduler and eod2_enabled:
+        entities.append(Trigger401kCheckButton(entry))
 
     entities.append(SendTestNotificationButton(entry))
     async_add_entities(entities)
@@ -86,3 +93,23 @@ class SendTestNotificationButton(ButtonEntity):
             event_name, event_data = _TEST_EVENTS[test_type]
             self.hass.bus.async_fire(event_name, {**event_data, "test": True})
             _LOGGER.info("Fired test event: %s", event_name)
+
+
+class Trigger401kCheckButton(ButtonEntity):
+    _attr_icon = "mdi:briefcase-clock"
+
+    def __init__(self, entry: ConfigEntry) -> None:
+        self._entry = entry
+        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_trigger_401k"
+        self._attr_name = "401k Update"
+        self._attr_device_info = device_info(entry)
+
+    async def async_press(self) -> None:
+        data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id)
+        if not data:
+            _LOGGER.warning("Entry data not available during 401k trigger")
+            return
+        scheduler = data.get("scheduler")
+        if scheduler:
+            await scheduler._eod2_start_watch()
+            _LOGGER.info("401k NAV watch triggered manually")
