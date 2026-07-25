@@ -55,12 +55,18 @@ python3 -m unittest discover tests
 
 ## Version History
 
+### v2.4.0 — 2026-07-25
+- **Fixed `gql` version conflict that broke the HA core Monarch Money integration.** The v2.3.2 manifest pinned `gql<4`, but `monarchmoney` itself requires `gql>=4.0` and the HA core Monarch Money integration (`monarchmoneycommunity`) requires `gql==4.0`. Installing this HACS integration downgraded `gql` from 4.x to 3.x in HA's shared Python environment, breaking Monarch authentication for both integrations. The damage persisted after disabling or removing the HACS integration because HA does not uninstall pip packages — only a full restore reverted the `gql` version
+- Changed `gql<4` to `gql>=4.0` to match upstream requirements
+- Relaxed `monarchmoney==0.1.15` to `monarchmoney>=0.1.15` to avoid forcing a specific version
+- Removed the unnecessary `gql` import pre-check from setup (the manifest handles package installation)
+
 ### v2.3.3 — 2026-07-25
 - Set an explicit 30-second timeout on Monarch requests. The `monarchmoney` client defaults to 10 seconds, which is tight for a login round trip — and a timeout was indistinguishable from a rejected credential, so it triggered the same backoff as a real auth failure
 - Made the login backoff rate-limit aware. `monarchmoney` has no handling for HTTP 429, so a rate-limit response arrives as an ordinary error; retrying one of those after 60 seconds only prolongs the lockout. A failure that looks like a rate limit now starts at 15 minutes instead, still capping at an hour. Monarch applies the limit per account, so this matters for anything else signed in as the same user
 
 ### v2.3.2 — 2026-07-25
-- **Constrained `gql` to `<4`.** `monarchmoney` 0.1.15 requires `gql>=3.4` with no upper bound, and gql 4.0 changed `Client.execute_async` to take a request object. Installing `monarchmoney` therefore pulled gql 4 and every Monarch call failed with `TypeError: Client.execute_async() missing 1 required positional argument: 'request'` — affecting any other integration sharing the package
+- **Constrained `gql` to `<4`** — this was incorrect and is reverted in v2.4.0; see that entry for details
 - **Stopped re-authenticating on every failed poll.** A fetch failure discarded the Monarch session, so the next poll performed a full login. With a persistent fault that became a login attempt every poll interval, and Monarch answered with `HTTP 429: Too Many Requests` — locking out other integrations using the same account. The session is now retained on fetch failures, and failed logins back off exponentially from 60 seconds up to an hour
 
 ### v2.3.1 — 2026-07-25
