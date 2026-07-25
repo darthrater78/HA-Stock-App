@@ -212,23 +212,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def _test_monarch(self):
-        try:
-            from .monarch import MonarchClient
-        except ImportError:
-            self._monarch_error = "monarchmoney package not installed."
-            return self.async_show_form(
-                step_id="monarch",
-                data_schema=vol.Schema({
-                    vol.Optional(CONF_MONARCH_ENABLED, default=True): bool,
-                    vol.Optional(CONF_MONARCH_EMAIL, default=self._data.get(CONF_MONARCH_EMAIL, "")): str,
-                    vol.Optional(CONF_MONARCH_PASSWORD, default=""): str,
-                    vol.Optional(CONF_MONARCH_MFA_SECRET, default=""): str,
-                }),
-                errors={"base": "monarch_auth_failed"},
-                description_placeholders={
-                    "stock_result": self._stock_test_result,
-                },
-            )
+        from .monarch import MonarchClient
 
         client = MonarchClient(
             self._data[CONF_MONARCH_EMAIL],

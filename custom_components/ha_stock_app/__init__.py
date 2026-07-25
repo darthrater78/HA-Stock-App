@@ -138,17 +138,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             data["monarch_coordinator"] = monarch_coordinator
             ir.async_delete_issue(hass, DOMAIN, monarch_issue_id)
         except ImportError:
-            _LOGGER.warning(
-                "Monarch Money enabled but monarchmoney package not installed. "
-                "Install it with: pip install monarchmoney"
-            )
-            ir.async_create_issue(
-                hass,
-                DOMAIN,
-                f"monarch_package_missing_{entry.entry_id}",
-                is_fixable=False,
-                severity=ir.IssueSeverity.ERROR,
-                translation_key="monarch_package_missing",
+            _LOGGER.error(
+                "Monarch Money enabled but monarchmoney package not available"
             )
         except ConfigEntryNotReady:
             # async_config_entry_first_refresh raises this when Monarch is
@@ -313,7 +304,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # into a coordinator that has already been torn down.
             monarch_coordinator.async_cancel_pending()
         ir.async_delete_issue(hass, DOMAIN, f"monarch_auth_failed_{entry.entry_id}")
-        ir.async_delete_issue(hass, DOMAIN, f"monarch_package_missing_{entry.entry_id}")
         ir.async_delete_issue(hass, DOMAIN, f"stock_api_failure_{entry.entry_id}")
         ir.async_delete_issue(hass, DOMAIN, f"finnhub_self_test_failed_{entry.entry_id}")
         if not hass.data[DOMAIN]:
