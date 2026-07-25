@@ -24,11 +24,11 @@ from .const import (
     CONF_MONARCH_PASSWORD,
     CONF_MONARCH_MFA_SECRET,
     CONF_ALERT_THRESHOLD,
-    CONF_MONARCH_ACCOUNTS,
     CONF_ENABLE_MARKET_HOURS,
     CONF_ENABLE_PAYCHECK_DETECTION,
     CONF_MARKET_TIMEZONE,
     CONF_MONARCH_POLL_INTERVAL,
+    CONF_PAYCHECK_ACCOUNT,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
     DEFAULT_ALERT_THRESHOLD,
@@ -175,7 +175,7 @@ class MonarchCoordinator(DataUpdateCoordinator):
         self._pay_windows = parse_pay_windows(
             config.get(CONF_PAYCHECK_WINDOWS, DEFAULT_PAYCHECK_WINDOWS)
         )
-        self._selected_accounts: list[str] = config.get(CONF_MONARCH_ACCOUNTS, [])
+        self._paycheck_account: str = config.get(CONF_PAYCHECK_ACCOUNT, "")
 
         _LOGGER.info(
             "MonarchCoordinator initialized: poll every %dm, paycheck detection %s",
@@ -268,13 +268,17 @@ class MonarchCoordinator(DataUpdateCoordinator):
         result["holdings_complete"] = holdings_complete
 
         if self._paycheck_enabled:
-            cash_types = {"Cash", "Checking", "Savings"}
-            total_cash = sum(
-                acct.balance
-                for acct in accounts
-                if acct.account_type in cash_types
-                and (not self._selected_accounts or acct.id in self._selected_accounts)
-            )
+            if self._paycheck_account:
+                total_cash = sum(
+                    acct.balance for acct in accounts
+                    if acct.id == self._paycheck_account
+                )
+            else:
+                cash_types = {"Cash", "Checking", "Savings"}
+                total_cash = sum(
+                    acct.balance for acct in accounts
+                    if acct.account_type in cash_types
+                )
 
             if self._previous_cash is not None:
                 delta = total_cash - self._previous_cash

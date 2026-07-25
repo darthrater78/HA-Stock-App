@@ -34,6 +34,7 @@ DEFAULT_ENABLE_PAYCHECK_DETECTION = True
 
 # Configurable values
 CONF_MONARCH_POLL_INTERVAL = "monarch_poll_interval"
+CONF_PAYCHECK_ACCOUNT = "paycheck_account"
 CONF_PAYCHECK_THRESHOLD = "paycheck_threshold"
 CONF_PAYCHECK_WINDOWS = "paycheck_windows"
 CONF_401K_SENSOR = "401k_sensor_entity"

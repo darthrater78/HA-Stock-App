@@ -89,6 +89,7 @@
         "title": "Advanced Settings",
         "description": "Configure paycheck detection thresholds and 401k deferred reporting.",
         "data": {
+          "paycheck_account": "Paycheck Detection Account",
           "paycheck_threshold": "Paycheck Detection Threshold ($)",
           "paycheck_windows": "Pay Windows (day ranges, e.g. 27-5,11-19)",
           "401k_sensor_entity": "401k Sensor Entity ID",

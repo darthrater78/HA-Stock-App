@@ -33,6 +33,7 @@ from .const import (
     CONF_ENABLE_DEBUG_LOGGING,
     CONF_MARKET_TIMEZONE,
     CONF_MONARCH_POLL_INTERVAL,
+    CONF_PAYCHECK_ACCOUNT,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
     CONF_401K_SENSOR,
@@ -458,6 +459,9 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
 
         if user_input is not None and not errors:
             if self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False):
+                self._options[CONF_PAYCHECK_ACCOUNT] = user_input.get(
+                    CONF_PAYCHECK_ACCOUNT, ""
+                )
                 self._options[CONF_PAYCHECK_THRESHOLD] = user_input.get(
                     CONF_PAYCHECK_THRESHOLD, DEFAULT_PAYCHECK_THRESHOLD
                 )
@@ -483,6 +487,13 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         schema_dict = {}
 
         if self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False):
+            account_options: dict[str, str] = {"": "All cash accounts (default)"}
+            data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
+            coordinator = data.get("monarch_coordinator")
+            if coordinator and coordinator.data:
+                for acct_id, acct in coordinator.data.get("accounts", {}).items():
+                    account_options[acct_id] = f"{acct.institution} - {acct.name}"
+            schema_dict[vol.Optional(CONF_PAYCHECK_ACCOUNT, default=opts.get(CONF_PAYCHECK_ACCOUNT, ""))] = vol.In(account_options)
             schema_dict[vol.Optional(CONF_PAYCHECK_THRESHOLD, default=opts.get(CONF_PAYCHECK_THRESHOLD, DEFAULT_PAYCHECK_THRESHOLD))] = vol.All(
                 vol.Coerce(float), vol.Range(min=100.0, max=50000.0)
             )
