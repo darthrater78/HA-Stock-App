@@ -269,7 +269,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required(
                     CONF_MONARCH_ACCOUNTS,
-                    default=list(account_options.keys()),
+                    default=[],
                 ): cv.multi_select(account_options),
             }),
         )
@@ -430,7 +430,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=self._options)
 
         current_selected = self._config_entry.data.get(
-            CONF_MONARCH_ACCOUNTS, list(account_options.keys())
+            CONF_MONARCH_ACCOUNTS, []
         )
         return self.async_show_form(
             step_id="select_accounts",
