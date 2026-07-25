@@ -81,3 +81,14 @@ DEFAULT_ENABLE_DEBUG_LOGGING = False
 PROVIDERS = {
     "finnhub": "Finnhub",
 }
+
+
+def device_info(entry) -> dict:
+    from homeassistant.helpers.device_registry import DeviceInfo
+
+    return DeviceInfo(
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="HA Stock App",
+        manufacturer="HA Stock App",
+        model="Stock & Finance Tracker",
+    )

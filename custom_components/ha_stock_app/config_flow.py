@@ -227,6 +227,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data[CONF_MONARCH_EMAIL],
             self._data[CONF_MONARCH_PASSWORD],
             mfa_secret=self._data.get(CONF_MONARCH_MFA_SECRET, ""),
+            session_dir=self.hass.config.path(f".storage/{DOMAIN}"),
         )
 
         if await client.authenticate():

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import time as dt_time
+from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -276,6 +277,14 @@ def _register_services(hass: HomeAssistant) -> None:
         handle_test_notification,
         schema=vol.Schema({vol.Required("type"): str}),
     )
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    session_dir = Path(hass.config.path(f".storage/{DOMAIN}"))
+    if session_dir.is_dir():
+        import shutil
+        await hass.async_add_executor_job(shutil.rmtree, str(session_dir), True)
+        _LOGGER.debug("Removed Monarch session storage at %s", session_dir)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
