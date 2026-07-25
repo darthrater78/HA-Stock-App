@@ -248,10 +248,15 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data[CONF_PL_ACCOUNTS] = user_input.get(CONF_PL_ACCOUNTS, [])
             return self.async_create_entry(title="HA Stock App", data=self._data)
 
-        account_options = {
-            acct.id: f"{acct.institution} - {acct.name}"
-            for acct in self._monarch_accounts
-        }
+        account_options = {}
+        investment_options = {}
+        non_investment_types = {"depository", "credit", "loan", "real_estate", "other"}
+        for acct in self._monarch_accounts:
+            label = f"{acct.institution} - {acct.name}"
+            account_options[acct.id] = label
+            if acct.type_name.lower() not in non_investment_types:
+                investment_options[acct.id] = label
+
         return self.async_show_form(
             step_id="select_accounts",
             data_schema=vol.Schema({
@@ -262,7 +267,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(
                     CONF_PL_ACCOUNTS,
                     default=[],
-                ): cv.multi_select(account_options),
+                ): cv.multi_select(investment_options),
             }),
         )
 
@@ -401,11 +406,19 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             return await self._after_pl_mapping()
 
         account_options: dict[str, str] = {}
+        investment_options: dict[str, str] = {}
         data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
         coordinator = data.get("monarch_coordinator")
         if coordinator and coordinator.data:
+            accounts_with_holdings: set[str] = set()
+            for h in coordinator.data.get("holdings", {}).values():
+                accounts_with_holdings.add(h.account_id)
+
             for acct_id, acct in coordinator.data.get("accounts", {}).items():
-                account_options[acct_id] = f"{acct.institution} - {acct.name}"
+                label = f"{acct.institution} - {acct.name}"
+                account_options[acct_id] = label
+                if acct_id in accounts_with_holdings:
+                    investment_options[acct_id] = label
 
         if not account_options:
             return await self._after_pl_mapping()
@@ -426,7 +439,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_PL_ACCOUNTS,
                     default=current_pl,
-                ): cv.multi_select(account_options),
+                ): cv.multi_select(investment_options),
             }),
         )
 
@@ -473,12 +486,13 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         )
         symbol_options = {"": "None (Monarch fallback)"}
         for s in sorted(stock_symbols):
-            symbol_options[s] = f"{s} (live)"
+            symbol_options[s] = s
 
         existing_map = self._config_entry.data.get(CONF_PL_TICKER_MAP, {})
 
         seen_tickers: set[str] = set()
         schema_dict = {}
+        holding_lines: list[str] = []
         for h in sorted(holdings, key=lambda x: (x.account_name, x.ticker)):
             ticker = (h.ticker or "N/A").upper()
             if ticker in seen_tickers:
@@ -496,12 +510,23 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                 symbol_options
             )
 
+            accounts_for_ticker = sorted({
+                hh.account_name for hh in holdings
+                if (hh.ticker or "N/A").upper() == ticker
+            })
+            acct_str = ", ".join(accounts_for_ticker)
+            name = h.name or ticker
+            holding_lines.append(f"- **{ticker}** — {name} ({acct_str})")
+
         if not schema_dict:
             return await self._after_pl_mapping()
+
+        holdings_summary = "\n".join(holding_lines)
 
         return self.async_show_form(
             step_id="pl_mapping",
             data_schema=vol.Schema(schema_dict),
+            description_placeholders={"holdings_summary": holdings_summary},
         )
 
     async def async_step_advanced(self, user_input=None):
