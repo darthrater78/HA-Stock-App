@@ -486,12 +486,13 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         )
         symbol_options = {"": "None (Monarch fallback)"}
         for s in sorted(stock_symbols):
-            symbol_options[s] = f"{s} (live)"
+            symbol_options[s] = s
 
         existing_map = self._config_entry.data.get(CONF_PL_TICKER_MAP, {})
 
         seen_tickers: set[str] = set()
         schema_dict = {}
+        holding_lines: list[str] = []
         for h in sorted(holdings, key=lambda x: (x.account_name, x.ticker)):
             ticker = (h.ticker or "N/A").upper()
             if ticker in seen_tickers:
@@ -509,12 +510,23 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                 symbol_options
             )
 
+            accounts_for_ticker = sorted({
+                hh.account_name for hh in holdings
+                if (hh.ticker or "N/A").upper() == ticker
+            })
+            acct_str = ", ".join(accounts_for_ticker)
+            name = h.name or ticker
+            holding_lines.append(f"- **{ticker}** — {name} ({acct_str})")
+
         if not schema_dict:
             return await self._after_pl_mapping()
+
+        holdings_summary = "\n".join(holding_lines)
 
         return self.async_show_form(
             step_id="pl_mapping",
             data_schema=vol.Schema(schema_dict),
+            description_placeholders={"holdings_summary": holdings_summary},
         )
 
     async def async_step_advanced(self, user_input=None):

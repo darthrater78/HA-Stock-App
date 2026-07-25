@@ -74,7 +74,7 @@
       },
       "pl_mapping": {
         "title": "P&L Ticker Mapping",
-        "description": "Map each holding to a live stock feed for real-time P&L. Holdings matched to a configured stock symbol use the live Finnhub price; set to 'None' to fall back to Monarch's daily change."
+        "description": "Map each holding to a live Finnhub symbol for real-time P&L. Select 'None' to use Monarch's daily change instead.\n\n**Your holdings:**\n{holdings_summary}"
       },
       "advanced": {
         "title": "Advanced Settings",
