@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, device_info
+
+_LOGGER = logging.getLogger(__name__)
 
 TEST_NOTIFICATION_OPTIONS = {
     "eod_summary": "End-of-Day Summary",
@@ -41,5 +45,9 @@ class TestNotificationTypeSelect(SelectEntity):
     async def async_select_option(self, option: str) -> None:
         self._attr_current_option = option
         internal = self._value_map.get(option, "eod_summary")
-        self.hass.data[DOMAIN][self._entry.entry_id]["test_notification_type"] = internal
+        data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id)
+        if data is not None:
+            data["test_notification_type"] = internal
+        else:
+            _LOGGER.warning("Entry data not available when selecting notification type")
         self.async_write_ha_state()

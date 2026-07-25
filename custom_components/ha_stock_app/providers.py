@@ -67,7 +67,8 @@ class FinnhubProvider(StockProvider):
         try:
             quote = await self.get_quote("AAPL")
             return quote is not None
-        except Exception:
+        except Exception as exc:
+            _LOGGER.warning("API key validation failed: %s", type(exc).__name__)
             return False
 
     async def get_quote(self, symbol: str) -> StockQuote | None:

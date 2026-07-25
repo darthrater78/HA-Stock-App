@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import (
@@ -16,6 +17,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import CONF_MONARCH_ACCOUNTS, DOMAIN, device_info
 from .coordinator import StockCoordinator, MonarchCoordinator
 from .market import NYSECalendar, market_now
+
+_LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .monarch import MonarchAccount, MonarchHolding

@@ -37,9 +37,13 @@ class RefreshStocksButton(ButtonEntity):
         self._attr_device_info = device_info(entry)
 
     async def async_press(self) -> None:
-        data = self.hass.data[DOMAIN][self._entry.entry_id]
-        coordinator = data["stock_coordinator"]
-        await coordinator.async_request_refresh()
+        data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id)
+        if not data:
+            _LOGGER.warning("Entry data not available during stock refresh")
+            return
+        coordinator = data.get("stock_coordinator")
+        if coordinator:
+            await coordinator.async_request_refresh()
 
 
 class RefreshMonarchButton(ButtonEntity):
@@ -52,7 +56,10 @@ class RefreshMonarchButton(ButtonEntity):
         self._attr_device_info = device_info(entry)
 
     async def async_press(self) -> None:
-        data = self.hass.data[DOMAIN][self._entry.entry_id]
+        data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id)
+        if not data:
+            _LOGGER.warning("Entry data not available during Monarch refresh")
+            return
         coordinator = data.get("monarch_coordinator")
         if coordinator:
             await coordinator.async_request_refresh()
@@ -70,7 +77,10 @@ class SendTestNotificationButton(ButtonEntity):
     async def async_press(self) -> None:
         from . import _TEST_EVENTS
 
-        data = self.hass.data[DOMAIN][self._entry.entry_id]
+        data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id)
+        if not data:
+            _LOGGER.warning("Entry data not available during test notification")
+            return
         test_type = data.get("test_notification_type", "eod_summary")
         if test_type in _TEST_EVENTS:
             event_name, event_data = _TEST_EVENTS[test_type]

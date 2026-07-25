@@ -436,6 +436,7 @@ class ScheduledFeatures:
                     {"error": "No quote returned", "symbol": symbol},
                 )
         except Exception as exc:
+            _LOGGER.warning("Finnhub self-test failed for %s: %s", symbol, exc)
             self.hass.bus.async_fire(
                 EVENT_FINNHUB_ERROR,
                 {"error": type(exc).__name__, "symbol": symbol},
@@ -528,6 +529,10 @@ class ScheduledFeatures:
                 change = new_val - old_val
                 change_pct = (change / old_val * 100) if old_val else 0
             except (ValueError, ZeroDivisionError):
+                _LOGGER.warning(
+                    "401k sensor %s returned non-numeric value %r; skipping change calc",
+                    sensor_id, current_value,
+                )
                 new_val = current_value
                 old_val = self._eod2_baseline
                 change = 0
