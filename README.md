@@ -20,14 +20,23 @@ A Home Assistant custom integration (HACS) for tracking stock prices and, option
 - **Device grouping** — all entities are grouped under a single HA Stock App device with proper `SensorDeviceClass.MONETARY` for currency display
 - Every feature above is independently toggleable through the config/options flow
 
-All events are fired on the HA event bus (`ha_stock_app_*`) for use with Node-RED or automations to deliver mobile notifications.
+All events are fired on the HA event bus (`ha_stock_app_*`). The integration tracks prices and balances — **to get mobile notifications, import the included Node-RED flow** (see below).
 
-### Node-RED notifications (optional)
+## Notifications — Node-RED Flow
 
-`examples/node-red-notifications.json` is an importable Node-RED flow that turns
-these events into mobile notifications. Its formatting reproduces the standalone
-Node-RED engine this integration replaced, so alerts look the same as they did
-before. See [`examples/README.md`](examples/README.md) for setup.
+The recommended way to receive mobile notifications is the ready-made Node-RED flow included in this repo:
+
+**[`examples/node-red-notifications.json`](examples/node-red-notifications.json)** — import into Node-RED, point it at your mobile device, deploy. That's it.
+
+It formats every event type the integration fires (price alerts, end-of-day summaries, market open, paycheck detection, 401k updates, Finnhub status) into clean mobile notifications with per-event channels, built-in rate limiting, duplicate suppression, and test-event support.
+
+**Quick start:**
+1. Node-RED → menu → **Import** → paste the contents of `examples/node-red-notifications.json` → **Import**
+2. Open the **Mobile Notify** node → set the action to your device (e.g. `notify.mobile_app_pixel_9`)
+3. **Deploy**
+4. Test it from the HA Stock App device: pick a type from the **Test Notification Type** dropdown, press **Send Test Notification**
+
+Full details (event table, rate-limiting behavior, customization) are in [`examples/README.md`](examples/README.md).
 
 ## Installation
 
@@ -60,6 +69,7 @@ python3 -m unittest discover tests
 - Changed `gql<4` to `gql>=4.0` to match upstream requirements
 - Relaxed `monarchmoney==0.1.15` to `monarchmoney>=0.1.15` to avoid forcing a specific version
 - Removed the unnecessary `gql` import pre-check from setup (the manifest handles package installation)
+- Made the Node-RED notification flow more prominent in the README — it's the recommended way to get mobile notifications from the integration
 
 ### v2.3.3 — 2026-07-25
 - Set an explicit 30-second timeout on Monarch requests. The `monarchmoney` client defaults to 10 seconds, which is tight for a login round trip — and a timeout was indistinguishable from a rejected credential, so it triggered the same backoff as a real auth failure
