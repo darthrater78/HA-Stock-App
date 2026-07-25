@@ -55,6 +55,15 @@ python3 -m unittest discover tests
 
 ## Version History
 
+### v2.3.1 — 2026-07-25
+Fixes to the optional Node-RED example flow only. The integration itself is unchanged from v2.3.0.
+
+- Fixed the example flow flooding devices. Every event node held a subscription to the entire Home Assistant event bus, because the `server-events` node's own `event_type` filter is not honoured by all versions of `node-red-contrib-home-assistant-websocket`. `state_changed` fires hundreds of times a minute, and each one was formatted into a notification — enough to require rebooting a phone
+- Rebuilt the flow around a single subscription and a router, so an event reaches exactly one formatter rather than waking eight. 19 nodes down to 13
+- Added rate limiting that applies to test events too. They were previously exempt from every limit, which is why the one path that can be fired repeatedly had no protection at all
+- Added duplicate collapse, so an event delivered more than once produces a single notification. Limiter state moved to global context so several copies of the flow share one budget
+- Each formatter now refuses to build a notification from a payload lacking that event's fields, rather than emitting `undefined NaN%`
+
 ### v2.3.0 — 2026-07-24
 - Fixed a typo in the quiet-hours or pay-window fields stopping the integration from loading. Both are free-form text; they now reject bad input in the form with an explanatory error, and fall back to the default at runtime instead of raising during setup. Pay-window days are range-checked too, so a value like `99-200` no longer parses cleanly while silently never matching
 - Fixed the Monarch double-refresh timer not being cancelled on unload, which left it to fire into a torn-down coordinator
