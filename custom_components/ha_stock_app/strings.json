@@ -97,6 +97,18 @@
     "monarch_file_error": {
       "title": "Monarch Money session storage error",
       "description": "HA Stock App could not read or write its Monarch Money session file. Check that Home Assistant has permission to write to its `.storage` directory, then reload the integration."
+    },
+    "monarch_package_missing": {
+      "title": "Monarch Money package not installed",
+      "description": "Monarch Money is enabled but the `monarchmoney` Python package is not installed. Install it with `pip install monarchmoney` in your Home Assistant environment, then reload the integration."
+    },
+    "stock_api_failure": {
+      "title": "Stock API connection failure",
+      "description": "HA Stock App has been unable to fetch any stock quotes. This usually means the API key is invalid, expired, or rate-limited.\n\nTo fix: open this integration's **Configure** options, verify your API key, then reload the integration."
+    },
+    "finnhub_self_test_failed": {
+      "title": "Finnhub API self-test failed",
+      "description": "The daily pre-market API connectivity test could not fetch a quote from Finnhub. Stock data may be unavailable today.\n\nTo fix: check your Finnhub API key and rate limits. This issue clears automatically when the next self-test succeeds."
     }
   }
 }

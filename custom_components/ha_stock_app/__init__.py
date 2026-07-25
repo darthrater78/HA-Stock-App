@@ -119,7 +119,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _apply_debug_logging(entry)
 
-    stock_coordinator = StockCoordinator(hass, config)
+    stock_coordinator = StockCoordinator(hass, config, entry_id=entry.entry_id)
     await stock_coordinator.async_config_entry_first_refresh()
 
     data: dict = {
@@ -141,6 +141,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.warning(
                 "Monarch Money enabled but monarchmoney package not installed. "
                 "Install it with: pip install monarchmoney"
+            )
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                f"monarch_package_missing_{entry.entry_id}",
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="monarch_package_missing",
             )
         except ConfigEntryNotReady:
             # async_config_entry_first_refresh raises this when Monarch is
@@ -305,6 +313,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # into a coordinator that has already been torn down.
             monarch_coordinator.async_cancel_pending()
         ir.async_delete_issue(hass, DOMAIN, f"monarch_auth_failed_{entry.entry_id}")
+        ir.async_delete_issue(hass, DOMAIN, f"monarch_package_missing_{entry.entry_id}")
+        ir.async_delete_issue(hass, DOMAIN, f"stock_api_failure_{entry.entry_id}")
+        ir.async_delete_issue(hass, DOMAIN, f"finnhub_self_test_failed_{entry.entry_id}")
         if not hass.data[DOMAIN]:
             hass.services.async_remove(DOMAIN, "test_notification")
     return unload_ok
@@ -426,21 +437,39 @@ class ScheduledFeatures:
         symbols = self._stock_coordinator.stocks
         if not symbols:
             return
+        issue_id = f"finnhub_self_test_failed_{self._entry.entry_id}"
         symbol = symbols[0]
         try:
             quote = await provider.get_quote(symbol)
             if quote:
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
                 self.hass.bus.async_fire(
                     EVENT_FINNHUB_OK,
                     {"symbol": symbol, "price": quote.current_price},
                 )
             else:
+                ir.async_create_issue(
+                    self.hass,
+                    DOMAIN,
+                    issue_id,
+                    is_fixable=False,
+                    severity=ir.IssueSeverity.WARNING,
+                    translation_key="finnhub_self_test_failed",
+                )
                 self.hass.bus.async_fire(
                     EVENT_FINNHUB_ERROR,
                     {"error": "No quote returned", "symbol": symbol},
                 )
         except Exception as exc:
             _LOGGER.warning("Finnhub self-test failed for %s: %s", symbol, exc)
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="finnhub_self_test_failed",
+            )
             self.hass.bus.async_fire(
                 EVENT_FINNHUB_ERROR,
                 {"error": type(exc).__name__, "symbol": symbol},
