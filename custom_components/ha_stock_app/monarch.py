@@ -11,6 +11,26 @@ from monarchmoney import MonarchMoney, RequireMFAException
 
 _LOGGER = logging.getLogger(__name__)
 
+# The monarchmoney client defaults to a 10s timeout, which is tight for a login
+# round trip; a timeout then looks identical to a rejected credential. There is
+# no official Monarch API contract to design against -- the package is
+# reverse-engineered -- so this is deliberately forgiving.
+REQUEST_TIMEOUT = 30
+
+# Backoff floors for a failed login. The package does not handle HTTP 429, so a
+# rate-limit answer arrives as an ordinary error. Retrying one of those in a
+# minute is pointless and prolongs the lockout, and the limit applies to the
+# Monarch account rather than the caller -- so it also affects anything else
+# signed in as the same user.
+LOGIN_BACKOFF_MIN = 60.0
+LOGIN_BACKOFF_RATE_LIMITED = 900.0
+LOGIN_BACKOFF_MAX = 3600.0
+
+
+def _is_rate_limited(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "429" in text or "too many requests" in text
+
 
 class MonarchHoldingsError(Exception):
     """An account's holdings could not be retrieved.
@@ -95,7 +115,7 @@ class MonarchClient:
             return False
         self._last_login_attempt = now
         try:
-            self._mm = MonarchMoney()
+            self._mm = MonarchMoney(timeout=REQUEST_TIMEOUT)
 
             if self._session_file and self._session_file.exists():
                 try:
@@ -130,14 +150,17 @@ class MonarchClient:
             self._login_backoff = 0.0
             return True
         except Exception as exc:
-            # Exponential backoff capped at an hour, so repeated failures stop
-            # hammering the login endpoint.
+            # Exponential backoff, starting higher when the failure looks like a
+            # rate limit since those clear on Monarch's clock, not ours.
+            floor = LOGIN_BACKOFF_RATE_LIMITED if _is_rate_limited(exc) else LOGIN_BACKOFF_MIN
             self._login_backoff = min(
-                max(self._login_backoff * 2, 60.0), 3600.0
+                max(self._login_backoff * 2, floor), LOGIN_BACKOFF_MAX
             )
             _LOGGER.error(
-                "Monarch Money login failed: %s (next attempt in %ds)",
-                type(exc).__name__, int(self._login_backoff),
+                "Monarch Money login failed: %s%s (next attempt in %ds)",
+                type(exc).__name__,
+                " — rate limited by Monarch" if _is_rate_limited(exc) else "",
+                int(self._login_backoff),
             )
             _LOGGER.debug("Monarch Money login failure details", exc_info=True)
             self._mm = None

@@ -55,6 +55,10 @@ python3 -m unittest discover tests
 
 ## Version History
 
+### v2.3.3 — 2026-07-25
+- Set an explicit 30-second timeout on Monarch requests. The `monarchmoney` client defaults to 10 seconds, which is tight for a login round trip — and a timeout was indistinguishable from a rejected credential, so it triggered the same backoff as a real auth failure
+- Made the login backoff rate-limit aware. `monarchmoney` has no handling for HTTP 429, so a rate-limit response arrives as an ordinary error; retrying one of those after 60 seconds only prolongs the lockout. A failure that looks like a rate limit now starts at 15 minutes instead, still capping at an hour. Monarch applies the limit per account, so this matters for anything else signed in as the same user
+
 ### v2.3.2 — 2026-07-25
 - **Constrained `gql` to `<4`.** `monarchmoney` 0.1.15 requires `gql>=3.4` with no upper bound, and gql 4.0 changed `Client.execute_async` to take a request object. Installing `monarchmoney` therefore pulled gql 4 and every Monarch call failed with `TypeError: Client.execute_async() missing 1 required positional argument: 'request'` — affecting any other integration sharing the package
 - **Stopped re-authenticating on every failed poll.** A fetch failure discarded the Monarch session, so the next poll performed a full login. With a persistent fault that became a login attempt every poll interval, and Monarch answered with `HTTP 429: Too Many Requests` — locking out other integrations using the same account. The session is now retained on fetch failures, and failed logins back off exponentially from 60 seconds up to an hour
