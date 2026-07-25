@@ -1,11 +1,22 @@
 # Portfolio Dashboard for HA Stock App
 #
-# Drop this into a Home Assistant dashboard view.
-# Requires: HA Stock App integration, custom:mushroom-template-card,
-#           custom:sankey-chart (optional, for allocation view).
+# Drop this into a Home Assistant dashboard view (Settings > Dashboards
+# > Add Dashboard, then edit in YAML mode and paste this file).
 #
-# Entity IDs below assume the default names from HA Stock App.
-# Adjust if you've renamed entities in the HA entity registry.
+# Requires:
+#   - HA Stock App integration (HACS custom component)
+#   - custom:mushroom-template-card (HACS frontend)
+#   - custom:sankey-chart (HACS frontend, optional for allocation view)
+#
+# Replace placeholder entity IDs below with your actual HA Stock App
+# entities. Entity IDs are generated from your Monarch account names
+# and configured stock symbols during integration setup.
+#
+# The pattern is:
+#   Stock prices:  sensor.ha_stock_app_{symbol}_stock_price
+#   Holdings:      sensor.ha_stock_app_monarch_{ticker}_{account_name}
+#   Accounts:      sensor.ha_stock_app_monarch_{institution}_{name}
+#   P&L:           sensor.ha_stock_app_today_s_p_l
 
 title: Portfolio
 path: portfolio
@@ -14,6 +25,7 @@ icon: mdi:chart-line
 badges: []
 cards: []
 sections:
+  # ── Controls ──────────────────────────────────────────────────
   - type: grid
     columns: 1
     cards:
@@ -37,6 +49,32 @@ sections:
         features:
           - type: button
         features_position: inline
+      - type: tile
+        grid_options:
+          columns: 12
+          rows: 1
+        entity: button.ha_stock_app_send_test_notification
+        vertical: false
+        features:
+          - type: button
+        features_position: inline
+      - type: tile
+        grid_options:
+          columns: 12
+          rows: 1
+        entity: select.ha_stock_app_test_notification_type
+        vertical: false
+
+  # ── Positions ─────────────────────────────────────────────────
+  # A 2-column grid. Each stock card shows the live price, daily
+  # percent change (from the stock price sensor's change_percent
+  # attribute), and the Monarch holding value with dollar P&L.
+  #
+  # To add a new stock: duplicate any card below and replace:
+  #   1. The primary label
+  #   2. The stock price entity ID
+  #   3. The monarch holding entity ID
+  #   4. The icon and color thresholds to taste
   - type: grid
     columns: 2
     cards:
@@ -87,6 +125,10 @@ sections:
           {% endif %}
         tap_action:
           action: none
+
+      # ── ETF example card (VOO) ──
+      # Replace sensor.ha_stock_app_monarch_TICKER_ACCOUNT with your
+      # actual holding entity ID from the integration.
       - type: custom:mushroom-template-card
         primary: VOO
         multiline_secondary: true
@@ -94,7 +136,7 @@ sections:
           ${{ states('sensor.ha_stock_app_voo_stock_price') | float(0) | round(2) }}
           · {% set p = state_attr('sensor.ha_stock_app_voo_stock_price', 'change_percent') | float(0) %}{% if p >= 0 %}+{% endif %}{{ p | round(2) }}%
 
-          {% set h = states('sensor.ha_stock_app_monarch_voo_individual_tod_1176') | float(0) %}{% set dc = h * (p / 100) / (1 + p / 100) %}${{ '{:,.0f}'.format(h) }} · {% if dc >= 0 %}+{% else %}-{% endif %}${{ '{:,.0f}'.format(dc | abs) }}
+          {% set h = states('sensor.ha_stock_app_monarch_voo_your_brokerage_xxxx') | float(0) %}{% set dc = h * (p / 100) / (1 + p / 100) %}${{ '{:,.0f}'.format(h) }} · {% if dc >= 0 %}+{% else %}-{% endif %}${{ '{:,.0f}'.format(dc | abs) }}
         icon: mdi:chart-line
         icon_color: >
           {% set p = state_attr('sensor.ha_stock_app_voo_stock_price', 'change_percent') | float(0) %}
@@ -107,86 +149,35 @@ sections:
           {% if p >= 0 %}green{% else %}red{% endif %}
         tap_action:
           action: none
+
+      # ── Individual stock example card (AAPL) ──
+      # Individual stocks use tighter thresholds (2%) for
+      # green/red than ETFs (1%) since they're more volatile.
       - type: custom:mushroom-template-card
-        primary: VTI
+        primary: AAPL
         multiline_secondary: true
         secondary: >-
-          ${{ states('sensor.ha_stock_app_vti_stock_price') | float(0) | round(2) }}
-          · {% set p = state_attr('sensor.ha_stock_app_vti_stock_price', 'change_percent') | float(0) %}{% if p >= 0 %}+{% endif %}{{ p | round(2) }}%
+          ${{ states('sensor.ha_stock_app_aapl_stock_price') | float(0) | round(2) }}
+          · {% set p = state_attr('sensor.ha_stock_app_aapl_stock_price', 'change_percent') | float(0) %}{% if p >= 0 %}+{% endif %}{{ p | round(2) }}%
 
-          {% set h = states('sensor.ha_stock_app_monarch_vti_roth_ira_6552') | float(0) %}{% set dc = h * (p / 100) / (1 + p / 100) %}${{ '{:,.0f}'.format(h) }} · {% if dc >= 0 %}+{% else %}-{% endif %}${{ '{:,.0f}'.format(dc | abs) }}
-        icon: mdi:chart-bell-curve
+          {% set h = states('sensor.ha_stock_app_monarch_aapl_your_brokerage_xxxx') | float(0) %}{% set dc = h * (p / 100) / (1 + p / 100) %}${{ '{:,.0f}'.format(h) }} · {% if dc >= 0 %}+{% else %}-{% endif %}${{ '{:,.0f}'.format(dc | abs) }}
+        icon: mdi:laptop
         icon_color: >
-          {% set p = state_attr('sensor.ha_stock_app_vti_stock_price', 'change_percent') | float(0) %}
-          {% if p >= 1 %}green{% elif p <= -1 %}red{% else %}yellow{% endif %}
-        badge_icon: >
-          {% set p = state_attr('sensor.ha_stock_app_vti_stock_price', 'change_percent') | float(0) %}
-          {% if p >= 0 %}mdi:trending-up{% else %}mdi:trending-down{% endif %}
-        badge_color: >
-          {% set p = state_attr('sensor.ha_stock_app_vti_stock_price', 'change_percent') | float(0) %}
-          {% if p >= 0 %}green{% else %}red{% endif %}
-        tap_action:
-          action: none
-      - type: custom:mushroom-template-card
-        primary: NVDA
-        multiline_secondary: true
-        secondary: >-
-          ${{ states('sensor.ha_stock_app_nvda_stock_price') | float(0) | round(2) }}
-          · {% set p = state_attr('sensor.ha_stock_app_nvda_stock_price', 'change_percent') | float(0) %}{% if p >= 0 %}+{% endif %}{{ p | round(2) }}%
-
-          {% set h = states('sensor.ha_stock_app_monarch_nvda_individual_tod_1176') | float(0) %}{% set dc = h * (p / 100) / (1 + p / 100) %}${{ '{:,.0f}'.format(h) }} · {% if dc >= 0 %}+{% else %}-{% endif %}${{ '{:,.0f}'.format(dc | abs) }}
-        icon: mdi:memory
-        icon_color: >
-          {% set p = state_attr('sensor.ha_stock_app_nvda_stock_price', 'change_percent') | float(0) %}
+          {% set p = state_attr('sensor.ha_stock_app_aapl_stock_price', 'change_percent') | float(0) %}
           {% if p >= 2 %}green{% elif p <= -2 %}red{% else %}yellow{% endif %}
         badge_icon: >
-          {% set p = state_attr('sensor.ha_stock_app_nvda_stock_price', 'change_percent') | float(0) %}
+          {% set p = state_attr('sensor.ha_stock_app_aapl_stock_price', 'change_percent') | float(0) %}
           {% if p >= 0 %}mdi:trending-up{% else %}mdi:trending-down{% endif %}
         badge_color: >
-          {% set p = state_attr('sensor.ha_stock_app_nvda_stock_price', 'change_percent') | float(0) %}
+          {% set p = state_attr('sensor.ha_stock_app_aapl_stock_price', 'change_percent') | float(0) %}
           {% if p >= 0 %}green{% else %}red{% endif %}
         tap_action:
           action: none
-      - type: custom:mushroom-template-card
-        primary: HPE
-        multiline_secondary: true
-        secondary: >-
-          ${{ states('sensor.ha_stock_app_hpe_stock_price') | float(0) | round(2) }}
-          · {% set p = state_attr('sensor.ha_stock_app_hpe_stock_price', 'change_percent') | float(0) %}{% if p >= 0 %}+{% endif %}{{ p | round(2) }}%
 
-          {% set h = states('sensor.ha_stock_app_monarch_hpe_individual_tod_1176') | float(0) %}{% set dc = h * (p / 100) / (1 + p / 100) %}${{ '{:,.0f}'.format(h) }} · {% if dc >= 0 %}+{% else %}-{% endif %}${{ '{:,.0f}'.format(dc | abs) }}
-        icon: mdi:server
-        icon_color: >
-          {% set p = state_attr('sensor.ha_stock_app_hpe_stock_price', 'change_percent') | float(0) %}
-          {% if p >= 2 %}green{% elif p <= -2 %}red{% else %}yellow{% endif %}
-        badge_icon: >
-          {% set p = state_attr('sensor.ha_stock_app_hpe_stock_price', 'change_percent') | float(0) %}
-          {% if p >= 0 %}mdi:trending-up{% else %}mdi:trending-down{% endif %}
-        badge_color: >
-          {% set p = state_attr('sensor.ha_stock_app_hpe_stock_price', 'change_percent') | float(0) %}
-          {% if p >= 0 %}green{% else %}red{% endif %}
-        tap_action:
-          action: none
-      - type: custom:mushroom-template-card
-        primary: ANET
-        multiline_secondary: true
-        secondary: >-
-          ${{ states('sensor.ha_stock_app_anet_stock_price') | float(0) | round(2) }}
-          · {% set p = state_attr('sensor.ha_stock_app_anet_stock_price', 'change_percent') | float(0) %}{% if p >= 0 %}+{% endif %}{{ p | round(2) }}%
-
-          {% set h = states('sensor.ha_stock_app_monarch_anet_individual_tod_1176') | float(0) %}{% set dc = h * (p / 100) / (1 + p / 100) %}${{ '{:,.0f}'.format(h) }} · {% if dc >= 0 %}+{% else %}-{% endif %}${{ '{:,.0f}'.format(dc | abs) }}
-        icon: mdi:switch
-        icon_color: >
-          {% set p = state_attr('sensor.ha_stock_app_anet_stock_price', 'change_percent') | float(0) %}
-          {% if p >= 2 %}green{% elif p <= -2 %}red{% else %}yellow{% endif %}
-        badge_icon: >
-          {% set p = state_attr('sensor.ha_stock_app_anet_stock_price', 'change_percent') | float(0) %}
-          {% if p >= 0 %}mdi:trending-up{% else %}mdi:trending-down{% endif %}
-        badge_color: >
-          {% set p = state_attr('sensor.ha_stock_app_anet_stock_price', 'change_percent') | float(0) %}
-          {% if p >= 0 %}green{% else %}red{% endif %}
-        tap_action:
-          action: none
+      # ── Today's P&L ──
+      # Requires P&L accounts to be configured in integration options.
+      # Uses live Finnhub data for matched tickers, Monarch fallback
+      # for unmatched. Check the sensor's attributes to verify pairings.
       - type: custom:mushroom-template-card
         primary: Today's P&L
         multiline_secondary: true
@@ -199,45 +190,38 @@ sections:
           %}green{% else %}red{% endif %}
         tap_action:
           action: none
+
+  # ── Today's Performance ───────────────────────────────────────
   - type: grid
     columns: 1
     cards:
       - type: heading
         heading: Today's Performance
       - type: history-graph
+        title: Stock Prices
         entities:
-          - entity: sensor.ha_stock_app_nvda_stock_price
-            name: NVDA
-          - entity: sensor.ha_stock_app_hpe_stock_price
-            name: HPE
-          - entity: sensor.ha_stock_app_anet_stock_price
-            name: ANET
-        title: Stocks Price
+          - entity: sensor.ha_stock_app_aapl_stock_price
+            name: AAPL
         hours_to_show: 9
       - type: history-graph
-        title: ETFs Price
+        title: ETF Prices
         entities:
           - entity: sensor.ha_stock_app_voo_stock_price
             name: VOO
-          - entity: sensor.ha_stock_app_vti_stock_price
-            name: VTI
         hours_to_show: 8
       - type: history-graph
         title: Holdings Value
         entities:
-          - entity: sensor.ha_stock_app_monarch_voo_individual_tod_1176
+          - entity: sensor.ha_stock_app_monarch_voo_your_brokerage_xxxx
             name: VOO
-          - entity: sensor.ha_stock_app_monarch_vti_roth_ira_6552
-            name: VTI
-          - entity: sensor.ha_stock_app_monarch_nvda_individual_tod_1176
-            name: NVDA
-          - entity: sensor.ha_stock_app_monarch_hpe_individual_tod_1176
-            name: HPE
-          - entity: sensor.ha_stock_app_monarch_anet_individual_tod_1176
-            name: ANET
-          - entity: sensor.ha_stock_app_monarch_legal_general_s_p_trinet_401k_island_technology_inc_5901
-            name: 401k
+          - entity: sensor.ha_stock_app_monarch_aapl_your_brokerage_xxxx
+            name: AAPL
         hours_to_show: 8
+
+  # ── Allocation (optional — requires custom:sankey-chart) ──────
+  # The Sankey chart flows account totals into per-holding values.
+  # First column: account-level sensors (the account balance).
+  # Second column: individual holding sensors within each account.
   - type: grid
     columns: 1
     cards:
@@ -261,45 +245,96 @@ sections:
         sort_dir: desc
         sections:
           - entities:
-              - entity_id: sensor.ha_stock_app_monarch_fidelity_individual_tod_1176
+              - entity_id: sensor.ha_stock_app_monarch_broker_your_brokerage_xxxx
                 name: Brokerage
                 color: var(--primary-color)
                 children:
-                  - sensor.ha_stock_app_monarch_voo_individual_tod_1176
-                  - sensor.ha_stock_app_monarch_nvda_individual_tod_1176
-                  - sensor.ha_stock_app_monarch_hpe_individual_tod_1176
-                  - sensor.ha_stock_app_monarch_anet_individual_tod_1176
-              - entity_id: sensor.ha_stock_app_monarch_fidelity_roth_ira_6552
+                  - sensor.ha_stock_app_monarch_voo_your_brokerage_xxxx
+                  - sensor.ha_stock_app_monarch_aapl_your_brokerage_xxxx
+              - entity_id: sensor.ha_stock_app_monarch_broker_your_ira_xxxx
                 name: Roth IRA
                 color: "#2196F3"
                 children:
-                  - sensor.ha_stock_app_monarch_vti_roth_ira_6552
-                  - sensor.ha_stock_app_monarch_whosx_roth_ira_6552
-              - entity_id: sensor.ha_stock_app_monarch_empower_retirement_trinet_401k_island_technology_inc_5901
+                  - sensor.ha_stock_app_monarch_voo_your_ira_xxxx
+              - entity_id: sensor.ha_stock_app_monarch_retirement_your_401k_xxxx
                 name: 401k
                 color: "#FF9800"
                 children:
-                  - sensor.ha_stock_app_monarch_legal_general_s_p_trinet_401k_island_technology_inc_5901
+                  - sensor.ha_stock_app_monarch_sp500_fund_your_401k_xxxx
           - entities:
-              - entity_id: sensor.ha_stock_app_monarch_voo_individual_tod_1176
+              - entity_id: sensor.ha_stock_app_monarch_voo_your_brokerage_xxxx
                 name: VOO
                 color: "#00BCD4"
-              - entity_id: sensor.ha_stock_app_monarch_nvda_individual_tod_1176
-                name: NVDA
+              - entity_id: sensor.ha_stock_app_monarch_aapl_your_brokerage_xxxx
+                name: AAPL
                 color: "#76FF03"
-              - entity_id: sensor.ha_stock_app_monarch_hpe_individual_tod_1176
-                name: HPE
-                color: "#FF6D00"
-              - entity_id: sensor.ha_stock_app_monarch_anet_individual_tod_1176
-                name: ANET
-                color: "#E040FB"
-              - entity_id: sensor.ha_stock_app_monarch_vti_roth_ira_6552
-                name: VTI
+              - entity_id: sensor.ha_stock_app_monarch_voo_your_ira_xxxx
+                name: VOO (IRA)
                 color: "#2196F3"
-              - entity_id: sensor.ha_stock_app_monarch_whosx_roth_ira_6552
-                name: WHOSX
-                color: "#4DB6AC"
-              - entity_id: sensor.ha_stock_app_monarch_legal_general_s_p_trinet_401k_island_technology_inc_5901
+              - entity_id: sensor.ha_stock_app_monarch_sp500_fund_your_401k_xxxx
                 name: 401k S&P
                 color: "#FF9800"
+
+  # ── Accounts ──────────────────────────────────────────────────
+  # Monarch account sensors show the current balance.
+  # Add cards for each account imported from Monarch.
+  - type: grid
+    columns: 2
+    cards:
+      - type: heading
+        heading: Accounts
+      - type: custom:mushroom-template-card
+        primary: Net Worth
+        multiline_secondary: true
+        secondary: >
+          ${{ '{:,.0f}'.format(states('sensor.ha_stock_app_monarch_net_worth') | float(0)) }}
+        icon: mdi:cash-multiple
+        icon_color: green
+        tap_action:
+          action: none
+      - type: custom:mushroom-template-card
+        primary: Checking
+        secondary: >
+          ${{ '{:,.2f}'.format(states('sensor.ha_stock_app_monarch_your_bank_checking_xxxx') | float(0)) }}
+        icon: mdi:bank
+        icon_color: blue
+        tap_action:
+          action: none
+      - type: custom:mushroom-template-card
+        primary: Savings
+        secondary: >
+          ${{ '{:,.2f}'.format(states('sensor.ha_stock_app_monarch_your_bank_savings_xxxx') | float(0)) }}
+        icon: mdi:piggy-bank
+        icon_color: purple
+        tap_action:
+          action: none
+      - type: custom:mushroom-template-card
+        primary: Credit Card
+        secondary: >
+          ${{ '{:,.2f}'.format(states('sensor.ha_stock_app_monarch_your_credit_card_xxxx') | float(0)) }}
+        icon: mdi:credit-card
+        icon_color: >
+          {% if states('sensor.ha_stock_app_monarch_your_credit_card_xxxx') | float(0) < 0
+          %}red{% else %}green{% endif %}
+        tap_action:
+          action: none
+      - type: custom:mushroom-template-card
+        primary: Mortgage
+        secondary: >
+          ${{ '{:,.0f}'.format(states('sensor.ha_stock_app_monarch_your_mortgage_xxxx') | float(0)) }}
+        icon: mdi:home-city
+        icon_color: orange
+        tap_action:
+          action: none
+
+  # ── Diagnostics ───────────────────────────────────────────────
+  - type: grid
+    columns: 1
+    cards:
+      - type: heading
+        heading: Diagnostics
+      - type: entities
+        entities:
+          - entity: sensor.ha_stock_app_monarch_package_version
+            name: Monarch Package Version
 max_columns: 1
