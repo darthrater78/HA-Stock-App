@@ -410,15 +410,17 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
         coordinator = data.get("monarch_coordinator")
         if coordinator and coordinator.data:
-            accounts_with_holdings: set[str] = set()
+            acct_tickers: dict[str, list[str]] = {}
             for h in coordinator.data.get("holdings", {}).values():
-                accounts_with_holdings.add(h.account_id)
+                ticker = (h.ticker or h.name[:10]).upper()
+                acct_tickers.setdefault(h.account_id, []).append(ticker)
 
             for acct_id, acct in coordinator.data.get("accounts", {}).items():
                 label = f"{acct.institution} - {acct.name}"
                 account_options[acct_id] = label
-                if acct_id in accounts_with_holdings:
-                    investment_options[acct_id] = label
+                if acct_id in acct_tickers:
+                    tickers = ", ".join(sorted(set(acct_tickers[acct_id])))
+                    investment_options[acct_id] = f"{acct.name} [{tickers}]"
 
         if not account_options:
             return await self._after_pl_mapping()
