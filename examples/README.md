@@ -64,6 +64,6 @@ State lives in Node-RED flow context and resets on redeploy.
 ### Customising
 
 Message text lives in the per-event **Format …** function nodes; each is
-self-contained, so edits are local. The **Test Tag + Repeat Suppression** node is
+self-contained, so edits are local. The **Rate Limit + Test Tag** node is
 the single exit gate — everything passes through it before the notify call, so
 that is the place to add a global mute or a quiet-hours check.
