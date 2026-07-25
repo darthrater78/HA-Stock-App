@@ -61,19 +61,36 @@ Three layers, in the **Rate Limit + Test Tag** node:
 ### Shape
 
 ```
-HA Stock App Events  ->  Route by Event Type  ->  Format <event>  ->  Rate Limit  ->  Mobile Notify
-   (one subscription)      (drops everything        (only the one
-                            not ours, dispatches     that matched)
-                            to exactly one output)
+Price Alert Event  ->  Format Price Alert  ->\
+EOD Summary Event  ->  Format EOD Summary  -> >  Rate Limit  ->  Mobile Notify
+        ... x8            ... x8            ->/
 ```
 
-One subscription, not eight. Some versions of
-`node-red-contrib-home-assistant-websocket` do not honour the `server-events`
-node's own event-type filter and deliver every event on the bus — including
-`state_changed`, which fires hundreds of times a minute in a normal install. With
-a listener per event that meant eight function nodes waking for every state
-change. The router does one string comparison and drops anything that is not
-this integration's, then sends the event to exactly one formatter.
+**Each listener subscribes to exactly one event type, and that filter is applied
+by Home Assistant, not by Node-RED.** The websocket client passes the type
+straight to HA's `subscribe_events`:
+
+```ts
+for (const type of add) {
+    this.#unsubCallback[type] = await this.client.subscribeEvents(
+        (ent) => this.onClientEvents(ent), type);
+}
+```
+
+So HA only ever sends these eight event types down the socket. `state_changed`
+— which fires hundreds of times a minute in a normal install — is never
+transmitted, never deserialised, and never wakes a node.
+
+**Never blank an Event Type field.** An empty one takes the library's `__ALL__`
+branch and subscribes to the entire bus; the package's own documentation warns
+this "may overload the WebSocket message queue". Eight filtered subscriptions
+cost far less than one unfiltered one, so node count is the wrong thing to
+optimise here.
+
+Each node sets both `eventType` and `event_type`. Current releases read the
+former, older ones the latter, and a flow exported from an older version filters
+nothing on a newer install — which is exactly how this flow once ended up
+subscribed to everything.
 
 A payload that reaches a formatter but lacks the event's fields is refused and
 logged as a warning. Without that, an unexpected payload still produced a
