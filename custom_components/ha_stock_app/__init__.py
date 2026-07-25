@@ -104,17 +104,20 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+def _apply_debug_logging(entry: ConfigEntry) -> None:
+    enabled = entry.options.get(CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING)
+    ha_stock_logger = logging.getLogger("custom_components.ha_stock_app")
+    ha_stock_logger.setLevel(logging.DEBUG if enabled else logging.INFO)
+    if enabled:
+        _LOGGER.info("Debug logging enabled for HA Stock App")
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     config = _merged_config(entry)
 
-    ha_stock_logger = logging.getLogger("custom_components.ha_stock_app")
-    if config.get(CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING):
-        ha_stock_logger.setLevel(logging.DEBUG)
-        _LOGGER.info("Debug logging enabled for HA Stock App")
-    else:
-        ha_stock_logger.setLevel(logging.INFO)
+    _apply_debug_logging(entry)
 
     stock_coordinator = StockCoordinator(hass, config)
     await stock_coordinator.async_config_entry_first_refresh()
@@ -199,6 +202,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    _apply_debug_logging(entry)
     await hass.config_entries.async_reload(entry.entry_id)
 
 
