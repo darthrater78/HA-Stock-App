@@ -1,5 +1,9 @@
+import json as _json
+from pathlib import Path as _Path
+
 DOMAIN = "ha_stock_app"
 PLATFORMS = ["sensor", "button", "select"]
+VERSION = _json.loads((_Path(__file__).parent / "manifest.json").read_text())["version"]
 
 CONF_STOCKS = "stocks"
 CONF_API_PROVIDER = "api_provider"
@@ -34,6 +38,7 @@ DEFAULT_ENABLE_PAYCHECK_DETECTION = True
 
 # Configurable values
 CONF_MONARCH_POLL_INTERVAL = "monarch_poll_interval"
+CONF_PAYCHECK_ACCOUNT = "paycheck_account"
 CONF_PAYCHECK_THRESHOLD = "paycheck_threshold"
 CONF_PAYCHECK_WINDOWS = "paycheck_windows"
 CONF_401K_SENSOR = "401k_sensor_entity"
@@ -81,3 +86,15 @@ DEFAULT_ENABLE_DEBUG_LOGGING = False
 PROVIDERS = {
     "finnhub": "Finnhub",
 }
+
+
+def device_info(entry) -> dict:
+    from homeassistant.helpers.device_registry import DeviceInfo
+
+    return DeviceInfo(
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="HA Stock App",
+        manufacturer="HA Stock App",
+        model="Stock & Finance Tracker",
+        sw_version=VERSION,
+    )

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import DOMAIN, device_info
+
+_LOGGER = logging.getLogger(__name__)
 
 TEST_NOTIFICATION_OPTIONS = {
     "eod_summary": "End-of-Day Summary",
@@ -17,15 +20,6 @@ TEST_NOTIFICATION_OPTIONS = {
     "finnhub_error": "Finnhub API Error",
     "finnhub_ok": "Finnhub API OK",
 }
-
-
-def _device_info(entry: ConfigEntry) -> DeviceInfo:
-    return DeviceInfo(
-        identifiers={(DOMAIN, entry.entry_id)},
-        name="HA Stock App",
-        manufacturer="HA Stock App",
-        model="Stock & Finance Tracker",
-    )
 
 
 async def async_setup_entry(
@@ -46,10 +40,14 @@ class TestNotificationTypeSelect(SelectEntity):
         self._attr_options = list(TEST_NOTIFICATION_OPTIONS.values())
         self._attr_current_option = "End-of-Day Summary"
         self._value_map = {v: k for k, v in TEST_NOTIFICATION_OPTIONS.items()}
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = device_info(entry)
 
     async def async_select_option(self, option: str) -> None:
         self._attr_current_option = option
         internal = self._value_map.get(option, "eod_summary")
-        self.hass.data[DOMAIN][self._entry.entry_id]["test_notification_type"] = internal
+        data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id)
+        if data is not None:
+            data["test_notification_type"] = internal
+        else:
+            _LOGGER.warning("Entry data not available when selecting notification type")
         self.async_write_ha_state()

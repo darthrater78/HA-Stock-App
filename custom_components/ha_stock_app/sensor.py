@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
+
+from importlib.metadata import version as pkg_version
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -8,27 +11,20 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_MONARCH_ACCOUNTS, DOMAIN
+from .const import CONF_MONARCH_ACCOUNTS, DOMAIN, device_info
 from .coordinator import StockCoordinator, MonarchCoordinator
 from .market import NYSECalendar, market_now
 
+_LOGGER = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from .monarch import MonarchAccount, MonarchHolding
-
-
-def _device_info(entry: ConfigEntry) -> DeviceInfo:
-    return DeviceInfo(
-        identifiers={(DOMAIN, entry.entry_id)},
-        name="HA Stock App",
-        manufacturer="HA Stock App",
-        model="Stock & Finance Tracker",
-    )
 
 
 async def async_setup_entry(
@@ -43,6 +39,7 @@ async def async_setup_entry(
     stock_coordinator: StockCoordinator = data["stock_coordinator"]
     entities.append(MarketStatusSensor(stock_coordinator, entry))
     entities.append(LastPollSensor(stock_coordinator, entry))
+    entities.append(MonarchPackageVersionSensor(entry))
     for symbol in stock_coordinator.stocks:
         entities.append(StockPriceSensor(stock_coordinator, symbol, entry))
 
@@ -98,7 +95,7 @@ class StockPriceSensor(CoordinatorEntity, SensorEntity):
         self._symbol = symbol
         self._attr_unique_id = f"{DOMAIN}_stock_{symbol.lower()}"
         self._attr_name = f"{symbol} Stock Price"
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = device_info(entry)
 
     @property
     def native_value(self) -> float | None:
@@ -133,7 +130,7 @@ class MonarchAccountSensor(CoordinatorEntity, SensorEntity):
         self._acct_id = account.id
         self._attr_unique_id = f"{DOMAIN}_monarch_{account.id}"
         self._attr_name = f"Monarch {account.institution} - {account.name}"
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = device_info(entry)
 
     @property
     def native_value(self) -> float | None:
@@ -167,7 +164,7 @@ class MonarchHoldingSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{DOMAIN}_monarch_holding_{holding.id}"
         ticker_part = holding.ticker if holding.ticker != "N/A" else holding.name[:20]
         self._attr_name = f"Monarch {ticker_part} ({holding.account_name})"
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = device_info(entry)
 
     @property
     def native_value(self) -> float | None:
@@ -209,7 +206,7 @@ class LastPollSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{DOMAIN}_last_poll"
         self._attr_name = "Last Stock Poll"
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = device_info(entry)
 
     @property
     def native_value(self):
@@ -225,7 +222,7 @@ class MarketStatusSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{DOMAIN}_market_status"
         self._attr_name = "Market Status"
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = device_info(entry)
 
     @property
     def native_value(self) -> str:
@@ -264,7 +261,7 @@ class MonarchNetWorthSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{DOMAIN}_monarch_net_worth"
         self._attr_name = "Monarch Net Worth"
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = device_info(entry)
 
     @property
     def native_value(self) -> float | None:
@@ -278,3 +275,20 @@ class MonarchNetWorthSensor(CoordinatorEntity, SensorEntity):
         if not self.coordinator.data:
             return {}
         return {"breakdown": self.coordinator.data.get("totals", {})}
+
+
+class MonarchPackageVersionSensor(SensorEntity):
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:package-variant"
+
+    def __init__(self, entry: ConfigEntry) -> None:
+        self._attr_unique_id = f"{DOMAIN}_monarch_package_version"
+        self._attr_name = "Monarch Package Version"
+        self._attr_device_info = device_info(entry)
+
+    @property
+    def native_value(self) -> str | None:
+        try:
+            return pkg_version("monarchmoneycommunity")
+        except Exception:
+            return None

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import logging
 from datetime import time as dt_time
+from importlib.metadata import version as pkg_version
+from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback, CALLBACK_TYPE
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_call_later, async_track_point_in_time
 
 import voluptuous as vol
@@ -26,6 +29,7 @@ from .const import (
     CONF_ENABLE_DEBUG_LOGGING,
     CONF_MARKET_TIMEZONE,
     CONF_MONARCH_POLL_INTERVAL,
+    CONF_PAYCHECK_ACCOUNT,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
     CONF_401K_SENSOR,
@@ -70,6 +74,7 @@ OPTION_DEFAULTS = {
     CONF_ENABLE_401K_REPORTING: DEFAULT_ENABLE_401K_REPORTING,
     CONF_ENABLE_PAYCHECK_DETECTION: DEFAULT_ENABLE_PAYCHECK_DETECTION,
     CONF_MONARCH_POLL_INTERVAL: DEFAULT_MONARCH_POLL_INTERVAL,
+    CONF_PAYCHECK_ACCOUNT: "",
     CONF_PAYCHECK_THRESHOLD: DEFAULT_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS: DEFAULT_PAYCHECK_WINDOWS,
     CONF_401K_SENSOR: "",
@@ -101,19 +106,65 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+MONARCH_PACKAGE = "monarchmoneycommunity"
+
+
+async def _check_monarch_update(hass: HomeAssistant, entry_id: str) -> None:
+    try:
+        installed = pkg_version(MONARCH_PACKAGE)
+    except Exception:
+        return
+    issue_id = f"monarch_update_available_{entry_id}"
+    try:
+        session = async_get_clientsession(hass)
+        async with session.get(
+            f"https://pypi.org/pypi/{MONARCH_PACKAGE}/json",
+            timeout=10,
+        ) as resp:
+            if resp.status != 200:
+                return
+            data = await resp.json()
+        latest = data.get("info", {}).get("version", "")
+        if not latest or latest == installed:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+            return
+        from packaging.version import Version
+        if Version(latest) > Version(installed):
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=True,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="monarch_update_available",
+                translation_placeholders={
+                    "installed": installed,
+                    "latest": latest,
+                },
+                data={"installed": installed, "latest": latest},
+            )
+        else:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+    except Exception:
+        _LOGGER.debug("Failed to check for %s updates", MONARCH_PACKAGE)
+
+
+def _apply_debug_logging(entry: ConfigEntry) -> None:
+    enabled = entry.options.get(CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING)
+    ha_stock_logger = logging.getLogger("custom_components.ha_stock_app")
+    ha_stock_logger.setLevel(logging.DEBUG if enabled else logging.INFO)
+    if enabled:
+        _LOGGER.info("Debug logging enabled for HA Stock App")
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     config = _merged_config(entry)
 
-    ha_stock_logger = logging.getLogger("custom_components.ha_stock_app")
-    if config.get(CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING):
-        ha_stock_logger.setLevel(logging.DEBUG)
-        _LOGGER.info("Debug logging enabled for HA Stock App")
-    else:
-        ha_stock_logger.setLevel(logging.INFO)
+    _apply_debug_logging(entry)
 
-    stock_coordinator = StockCoordinator(hass, config)
+    stock_coordinator = StockCoordinator(hass, config, entry_id=entry.entry_id)
     await stock_coordinator.async_config_entry_first_refresh()
 
     data: dict = {
@@ -127,15 +178,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             from .coordinator import MonarchCoordinator
 
-            await hass.async_add_executor_job(lambda: __import__("gql"))
             monarch_coordinator = MonarchCoordinator(hass, config)
             await monarch_coordinator.async_config_entry_first_refresh()
             data["monarch_coordinator"] = monarch_coordinator
             ir.async_delete_issue(hass, DOMAIN, monarch_issue_id)
         except ImportError:
-            _LOGGER.warning(
-                "Monarch Money enabled but monarchmoney package not installed. "
-                "Install it with: pip install monarchmoney"
+            _LOGGER.error(
+                "Monarch Money enabled but monarchmoney package not available"
             )
         except ConfigEntryNotReady:
             # async_config_entry_first_refresh raises this when Monarch is
@@ -193,10 +242,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.services.has_service(DOMAIN, "test_notification"):
         _register_services(hass)
 
+    hass.async_create_task(_check_monarch_update(hass, entry.entry_id))
+
     return True
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    _apply_debug_logging(entry)
     await hass.config_entries.async_reload(entry.entry_id)
 
 
@@ -279,6 +331,14 @@ def _register_services(hass: HomeAssistant) -> None:
     )
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    session_dir = Path(hass.config.path(f".storage/{DOMAIN}"))
+    if session_dir.is_dir():
+        import shutil
+        await hass.async_add_executor_job(shutil.rmtree, str(session_dir), True)
+        _LOGGER.debug("Removed Monarch session storage at %s", session_dir)
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         entry_data = hass.data[DOMAIN].pop(entry.entry_id)
@@ -291,6 +351,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # into a coordinator that has already been torn down.
             monarch_coordinator.async_cancel_pending()
         ir.async_delete_issue(hass, DOMAIN, f"monarch_auth_failed_{entry.entry_id}")
+        ir.async_delete_issue(hass, DOMAIN, f"stock_api_failure_{entry.entry_id}")
+        ir.async_delete_issue(hass, DOMAIN, f"finnhub_self_test_failed_{entry.entry_id}")
+        ir.async_delete_issue(hass, DOMAIN, f"monarch_update_available_{entry.entry_id}")
         if not hass.data[DOMAIN]:
             hass.services.async_remove(DOMAIN, "test_notification")
     return unload_ok
@@ -412,20 +475,39 @@ class ScheduledFeatures:
         symbols = self._stock_coordinator.stocks
         if not symbols:
             return
+        issue_id = f"finnhub_self_test_failed_{self._entry.entry_id}"
         symbol = symbols[0]
         try:
             quote = await provider.get_quote(symbol)
             if quote:
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
                 self.hass.bus.async_fire(
                     EVENT_FINNHUB_OK,
                     {"symbol": symbol, "price": quote.current_price},
                 )
             else:
+                ir.async_create_issue(
+                    self.hass,
+                    DOMAIN,
+                    issue_id,
+                    is_fixable=False,
+                    severity=ir.IssueSeverity.WARNING,
+                    translation_key="finnhub_self_test_failed",
+                )
                 self.hass.bus.async_fire(
                     EVENT_FINNHUB_ERROR,
                     {"error": "No quote returned", "symbol": symbol},
                 )
         except Exception as exc:
+            _LOGGER.warning("Finnhub self-test failed for %s: %s", symbol, exc)
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="finnhub_self_test_failed",
+            )
             self.hass.bus.async_fire(
                 EVENT_FINNHUB_ERROR,
                 {"error": type(exc).__name__, "symbol": symbol},
@@ -518,6 +600,10 @@ class ScheduledFeatures:
                 change = new_val - old_val
                 change_pct = (change / old_val * 100) if old_val else 0
             except (ValueError, ZeroDivisionError):
+                _LOGGER.warning(
+                    "401k sensor %s returned non-numeric value %r; skipping change calc",
+                    sensor_id, current_value,
+                )
                 new_val = current_value
                 old_val = self._eod2_baseline
                 change = 0

@@ -5,6 +5,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     TimestampDataUpdateCoordinator,
@@ -28,6 +29,7 @@ from .const import (
     CONF_ENABLE_PAYCHECK_DETECTION,
     CONF_MARKET_TIMEZONE,
     CONF_MONARCH_POLL_INTERVAL,
+    CONF_PAYCHECK_ACCOUNT,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
     DEFAULT_ALERT_THRESHOLD,
@@ -58,8 +60,9 @@ def _strip_sensitive(config: dict[str, Any]) -> dict[str, Any]:
 
 
 class StockCoordinator(TimestampDataUpdateCoordinator):
-    def __init__(self, hass: HomeAssistant, config: dict[str, Any]) -> None:
+    def __init__(self, hass: HomeAssistant, config: dict[str, Any], entry_id: str = "") -> None:
         self._config = _strip_sensitive(config)
+        self._entry_id = entry_id
         self._provider = get_provider(
             config[CONF_API_PROVIDER],
             config[CONF_API_KEY],
@@ -111,19 +114,26 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
         except Exception as exc:
             raise UpdateFailed("Stock data fetch failed") from exc
 
+        issue_id = f"stock_api_failure_{self._entry_id}" if self._entry_id else ""
+
         if self.stocks and not quotes:
-            # get_quote returns None rather than raising on an HTTP error, so a
-            # wholesale failure arrives here as an empty dict and is otherwise
-            # indistinguishable from success. Unflagged, a revoked API key would
-            # keep recording healthy polls -- fresh Last Stock Poll timestamp,
-            # no prices, and no failure surfaced anywhere.
+            if issue_id:
+                ir.async_create_issue(
+                    self.hass,
+                    DOMAIN,
+                    issue_id,
+                    is_fixable=False,
+                    severity=ir.IssueSeverity.ERROR,
+                    translation_key="stock_api_failure",
+                )
             raise UpdateFailed(
                 f"No quotes returned for any of the {len(self.stocks)} configured symbols"
             )
 
+        if issue_id:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+
         if missing := [s for s in self.stocks if s not in quotes]:
-            # A partial failure still leaves usable data, so this stays a
-            # warning rather than failing the whole poll.
             _LOGGER.warning("No quote returned for: %s", ", ".join(missing))
 
         prices = {s: round(q.current_price, 2) for s, q in quotes.items()}
@@ -174,6 +184,7 @@ class MonarchCoordinator(DataUpdateCoordinator):
         self._pay_windows = parse_pay_windows(
             config.get(CONF_PAYCHECK_WINDOWS, DEFAULT_PAYCHECK_WINDOWS)
         )
+        self._paycheck_account: str = config.get(CONF_PAYCHECK_ACCOUNT, "")
 
         _LOGGER.info(
             "MonarchCoordinator initialized: poll every %dm, paycheck detection %s",
@@ -266,11 +277,17 @@ class MonarchCoordinator(DataUpdateCoordinator):
         result["holdings_complete"] = holdings_complete
 
         if self._paycheck_enabled:
-            total_cash = (
-                by_type.get("Cash", 0.0)
-                + by_type.get("Checking", 0.0)
-                + by_type.get("Savings", 0.0)
-            )
+            if self._paycheck_account:
+                total_cash = sum(
+                    acct.balance for acct in accounts
+                    if acct.id == self._paycheck_account
+                )
+            else:
+                cash_types = {"Cash", "Checking", "Savings"}
+                total_cash = sum(
+                    acct.balance for acct in accounts
+                    if acct.account_type in cash_types
+                )
 
             if self._previous_cash is not None:
                 delta = total_cash - self._previous_cash

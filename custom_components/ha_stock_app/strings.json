@@ -12,31 +12,15 @@
           "alert_threshold": "Alert Threshold (%)"
         }
       },
-      "test_stock_api_success": {
-        "title": "Connection Successful",
-        "description": "{provider} API is working. Fetched {symbol} at {price} ({change}).\n\nClick Submit to continue."
-      },
-      "test_stock_api_failed": {
-        "title": "Connection Failed",
-        "description": "Could not fetch a quote from {provider} for {symbol}. Check your API key and try again.\n\nClick Submit to go back."
-      },
       "monarch": {
         "title": "Monarch Money (Optional)",
-        "description": "Optionally connect Monarch Money to track account balances and detect paychecks.\n\nThis integration uses the unofficial monarchmoney Python package (github.com/hammem/monarchmoney) to access your Monarch Money data. Your credentials are stored locally in your Home Assistant config and are only used to authenticate directly with Monarch Money. This project is not affiliated with or endorsed by Monarch Money.",
+        "description": "{stock_result}\n\nOptionally connect Monarch Money to track account balances and detect paychecks.\n\nThis integration uses the community-maintained monarchmoneycommunity Python package (github.com/bradleyseanf/monarchmoneycommunity) to access your Monarch Money data. Your credentials are stored locally in your Home Assistant config and are only used to authenticate directly with Monarch Money. This project is not affiliated with or endorsed by Monarch Money.",
         "data": {
           "monarch_enabled": "Enable Monarch Money",
           "monarch_email": "Monarch Email",
           "monarch_password": "Monarch Password",
           "monarch_mfa_secret": "TOTP Secret Key (if MFA enabled)"
         }
-      },
-      "test_monarch_success": {
-        "title": "Monarch Connected",
-        "description": "Successfully authenticated with Monarch Money. Found {account_count} accounts.\n\nClick Submit to finish setup."
-      },
-      "test_monarch_failed": {
-        "title": "Monarch Connection Failed",
-        "description": "{error}\n\nClick Submit to go back and try again."
       },
       "select_accounts": {
         "title": "Select Monarch Accounts",
@@ -48,6 +32,7 @@
     },
     "error": {
       "no_stocks": "Enter at least one stock symbol.",
+      "stock_api_failed": "Could not fetch a quote. Check your API key and try again.",
       "monarch_auth_failed": "Monarch Money login failed. Check your credentials.",
       "monarch_missing_credentials": "Email and password are required when Monarch is enabled.",
       "invalid_symbols": "One or more symbols are invalid. Use 1-10 characters: letters, numbers, dots, or hyphens."
@@ -89,6 +74,7 @@
         "title": "Advanced Settings",
         "description": "Configure paycheck detection thresholds and 401k deferred reporting.",
         "data": {
+          "paycheck_account": "Paycheck Detection Account",
           "paycheck_threshold": "Paycheck Detection Threshold ($)",
           "paycheck_windows": "Pay Windows (day ranges, e.g. 27-5,11-19)",
           "401k_sensor_entity": "401k Sensor Entity ID",
@@ -111,6 +97,29 @@
     "monarch_file_error": {
       "title": "Monarch Money session storage error",
       "description": "HA Stock App could not read or write its Monarch Money session file. Check that Home Assistant has permission to write to its `.storage` directory, then reload the integration."
+    },
+    "stock_api_failure": {
+      "title": "Stock API connection failure",
+      "description": "HA Stock App has been unable to fetch any stock quotes. This usually means the API key is invalid, expired, or rate-limited.\n\nTo fix: open this integration's **Configure** options, verify your API key, then reload the integration."
+    },
+    "finnhub_self_test_failed": {
+      "title": "Finnhub API self-test failed",
+      "description": "The daily pre-market API connectivity test could not fetch a quote from Finnhub. Stock data may be unavailable today.\n\nTo fix: check your Finnhub API key and rate limits. This issue clears automatically when the next self-test succeeds."
+    },
+    "monarch_update_available": {
+      "title": "Monarch Money package update available",
+      "description": "A newer version of the monarchmoneycommunity package is available (installed: {installed}, latest: {latest}).",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Update Monarch Money Package",
+            "description": "This will upgrade monarchmoneycommunity from {installed} to {latest}. A Home Assistant restart will be required afterward."
+          }
+        },
+        "abort": {
+          "update_failed": "The package upgrade failed. Check the Home Assistant logs for details, or try updating manually with HACS."
+        }
+      }
     }
   }
 }

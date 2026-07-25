@@ -33,6 +33,7 @@ from .const import (
     CONF_ENABLE_DEBUG_LOGGING,
     CONF_MARKET_TIMEZONE,
     CONF_MONARCH_POLL_INTERVAL,
+    CONF_PAYCHECK_ACCOUNT,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
     CONF_401K_SENSOR,
@@ -102,6 +103,8 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         self._data: dict = {}
         self._monarch_accounts: list = []
+        self._stock_test_result: str = ""
+        self._monarch_error: str = ""
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -123,7 +126,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_POLL_FREQUENCY: user_input.get(CONF_POLL_FREQUENCY, str(DEFAULT_POLL_FREQUENCY)),
                         CONF_ALERT_THRESHOLD: user_input.get(CONF_ALERT_THRESHOLD, DEFAULT_ALERT_THRESHOLD),
                     }
-                    return await self.async_step_test_stock_api()
+                    return await self._test_stock_api()
 
         return self.async_show_form(
             step_id="user",
@@ -139,7 +142,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_test_stock_api(self, user_input=None):
+    async def _test_stock_api(self):
         provider = get_provider(
             self._data[CONF_API_PROVIDER],
             self._data[CONF_API_KEY],
@@ -150,37 +153,31 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             quote = await provider.get_quote(test_symbol)
         except Exception:
-            # Any failure here must land on the retry step rather than
-            # aborting the flow with an unhandled-error screen.
             _LOGGER.exception("Stock API test failed for %s", test_symbol)
             quote = None
 
         if quote is None:
+            self._stock_test_result = ""
             return self.async_show_form(
-                step_id="test_stock_api_failed",
-                data_schema=vol.Schema({}),
-                description_placeholders={
-                    "provider": PROVIDERS.get(self._data[CONF_API_PROVIDER], self._data[CONF_API_PROVIDER]),
-                    "symbol": test_symbol,
-                },
+                step_id="user",
+                data_schema=vol.Schema({
+                    vol.Required(CONF_API_PROVIDER, default=self._data[CONF_API_PROVIDER]): vol.In(PROVIDERS),
+                    vol.Required(CONF_API_KEY, default=self._data[CONF_API_KEY]): str,
+                    vol.Required(CONF_STOCKS, default=", ".join(self._data[CONF_STOCKS])): str,
+                    vol.Optional(CONF_POLL_FREQUENCY, default=self._data[CONF_POLL_FREQUENCY]): vol.In(POLL_OPTIONS),
+                    vol.Optional(CONF_ALERT_THRESHOLD, default=self._data[CONF_ALERT_THRESHOLD]): vol.All(
+                        vol.Coerce(float), vol.Range(min=0.1, max=100.0)
+                    ),
+                }),
+                errors={CONF_API_KEY: "stock_api_failed"},
             )
 
-        return self.async_show_form(
-            step_id="test_stock_api_success",
-            data_schema=vol.Schema({}),
-            description_placeholders={
-                "provider": PROVIDERS.get(self._data[CONF_API_PROVIDER], self._data[CONF_API_PROVIDER]),
-                "symbol": quote.symbol,
-                "price": f"${quote.current_price:.2f}",
-                "change": f"{'+' if quote.change >= 0 else ''}{quote.change:.2f}",
-            },
+        provider_name = PROVIDERS.get(self._data[CONF_API_PROVIDER], self._data[CONF_API_PROVIDER])
+        change_str = f"{'+' if quote.change >= 0 else ''}{quote.change:.2f}"
+        self._stock_test_result = (
+            f"{provider_name} connected — {quote.symbol} at ${quote.current_price:.2f} ({change_str})"
         )
-
-    async def async_step_test_stock_api_success(self, user_input=None):
         return await self.async_step_monarch()
-
-    async def async_step_test_stock_api_failed(self, user_input=None):
-        return await self.async_step_user()
 
     async def async_step_monarch(self, user_input=None):
         errors = {}
@@ -195,7 +192,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._data[CONF_MONARCH_EMAIL] = email
                     self._data[CONF_MONARCH_PASSWORD] = password
                     self._data[CONF_MONARCH_MFA_SECRET] = user_input.get(CONF_MONARCH_MFA_SECRET, "").strip()
-                    return await self.async_step_test_monarch()
+                    return await self._test_monarch()
             else:
                 self._data[CONF_MONARCH_ENABLED] = False
                 return self.async_create_entry(title="HA Stock App", data=self._data)
@@ -209,51 +206,39 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_MONARCH_MFA_SECRET, default=""): str,
             }),
             errors=errors,
+            description_placeholders={
+                "stock_result": self._stock_test_result,
+            },
         )
 
-    async def async_step_test_monarch(self, user_input=None):
-        try:
-            from .monarch import MonarchClient
-        except ImportError:
-            return self.async_show_form(
-                step_id="test_monarch_failed",
-                data_schema=vol.Schema({}),
-                description_placeholders={
-                    "error": "monarchmoney package not installed. Install with: pip install monarchmoney",
-                },
-            )
+    async def _test_monarch(self):
+        from .monarch import MonarchClient
 
         client = MonarchClient(
             self._data[CONF_MONARCH_EMAIL],
             self._data[CONF_MONARCH_PASSWORD],
             mfa_secret=self._data.get(CONF_MONARCH_MFA_SECRET, ""),
+            session_dir=self.hass.config.path(f".storage/{DOMAIN}"),
         )
 
         if await client.authenticate():
             accounts = await client.get_accounts()
             self._monarch_accounts = accounts
-            return self.async_show_form(
-                step_id="test_monarch_success",
-                data_schema=vol.Schema({}),
-                description_placeholders={
-                    "account_count": str(len(accounts)),
-                },
-            )
-
-        mfa_hint = ""
-        if not self._data.get(CONF_MONARCH_MFA_SECRET):
-            mfa_hint = " If your account has MFA enabled, provide your TOTP secret key."
+            return await self.async_step_select_accounts()
 
         return self.async_show_form(
-            step_id="test_monarch_failed",
-            data_schema=vol.Schema({}),
+            step_id="monarch",
+            data_schema=vol.Schema({
+                vol.Optional(CONF_MONARCH_ENABLED, default=True): bool,
+                vol.Optional(CONF_MONARCH_EMAIL, default=self._data.get(CONF_MONARCH_EMAIL, "")): str,
+                vol.Optional(CONF_MONARCH_PASSWORD, default=""): str,
+                vol.Optional(CONF_MONARCH_MFA_SECRET, default=""): str,
+            }),
+            errors={"base": "monarch_auth_failed"},
             description_placeholders={
-                "error": f"Login failed. Check your credentials.{mfa_hint}",
+                "stock_result": self._stock_test_result,
             },
         )
-
-    async def async_step_test_monarch_success(self, user_input=None):
-        return await self.async_step_select_accounts()
 
     async def async_step_select_accounts(self, user_input=None):
         if user_input is not None:
@@ -269,13 +254,10 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required(
                     CONF_MONARCH_ACCOUNTS,
-                    default=list(account_options.keys()),
+                    default=[],
                 ): cv.multi_select(account_options),
             }),
         )
-
-    async def async_step_test_monarch_failed(self, user_input=None):
-        return await self.async_step_monarch()
 
     @staticmethod
     @callback
@@ -430,7 +412,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=self._options)
 
         current_selected = self._config_entry.data.get(
-            CONF_MONARCH_ACCOUNTS, list(account_options.keys())
+            CONF_MONARCH_ACCOUNTS, []
         )
         return self.async_show_form(
             step_id="select_accounts",
@@ -457,6 +439,9 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
 
         if user_input is not None and not errors:
             if self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False):
+                self._options[CONF_PAYCHECK_ACCOUNT] = user_input.get(
+                    CONF_PAYCHECK_ACCOUNT, ""
+                )
                 self._options[CONF_PAYCHECK_THRESHOLD] = user_input.get(
                     CONF_PAYCHECK_THRESHOLD, DEFAULT_PAYCHECK_THRESHOLD
                 )
@@ -482,6 +467,13 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         schema_dict = {}
 
         if self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False):
+            account_options: dict[str, str] = {"": "All cash accounts (default)"}
+            data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
+            coordinator = data.get("monarch_coordinator")
+            if coordinator and coordinator.data:
+                for acct_id, acct in coordinator.data.get("accounts", {}).items():
+                    account_options[acct_id] = f"{acct.institution} - {acct.name}"
+            schema_dict[vol.Optional(CONF_PAYCHECK_ACCOUNT, default=opts.get(CONF_PAYCHECK_ACCOUNT, ""))] = vol.In(account_options)
             schema_dict[vol.Optional(CONF_PAYCHECK_THRESHOLD, default=opts.get(CONF_PAYCHECK_THRESHOLD, DEFAULT_PAYCHECK_THRESHOLD))] = vol.All(
                 vol.Coerce(float), vol.Range(min=100.0, max=50000.0)
             )

@@ -5,21 +5,11 @@ import logging
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import DOMAIN, device_info
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _device_info(entry: ConfigEntry) -> DeviceInfo:
-    return DeviceInfo(
-        identifiers={(DOMAIN, entry.entry_id)},
-        name="HA Stock App",
-        manufacturer="HA Stock App",
-        model="Stock & Finance Tracker",
-    )
 
 
 async def async_setup_entry(
@@ -44,12 +34,16 @@ class RefreshStocksButton(ButtonEntity):
         self._entry = entry
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_refresh_stocks"
         self._attr_name = "Refresh Stock Prices"
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = device_info(entry)
 
     async def async_press(self) -> None:
-        data = self.hass.data[DOMAIN][self._entry.entry_id]
-        coordinator = data["stock_coordinator"]
-        await coordinator.async_request_refresh()
+        data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id)
+        if not data:
+            _LOGGER.warning("Entry data not available during stock refresh")
+            return
+        coordinator = data.get("stock_coordinator")
+        if coordinator:
+            await coordinator.async_request_refresh()
 
 
 class RefreshMonarchButton(ButtonEntity):
@@ -59,10 +53,13 @@ class RefreshMonarchButton(ButtonEntity):
         self._entry = entry
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_refresh_monarch"
         self._attr_name = "Refresh Monarch Accounts"
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = device_info(entry)
 
     async def async_press(self) -> None:
-        data = self.hass.data[DOMAIN][self._entry.entry_id]
+        data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id)
+        if not data:
+            _LOGGER.warning("Entry data not available during Monarch refresh")
+            return
         coordinator = data.get("monarch_coordinator")
         if coordinator:
             await coordinator.async_request_refresh()
@@ -75,12 +72,15 @@ class SendTestNotificationButton(ButtonEntity):
         self._entry = entry
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_test_notification"
         self._attr_name = "Send Test Notification"
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = device_info(entry)
 
     async def async_press(self) -> None:
         from . import _TEST_EVENTS
 
-        data = self.hass.data[DOMAIN][self._entry.entry_id]
+        data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id)
+        if not data:
+            _LOGGER.warning("Entry data not available during test notification")
+            return
         test_type = data.get("test_notification_type", "eod_summary")
         if test_type in _TEST_EVENTS:
             event_name, event_data = _TEST_EVENTS[test_type]
