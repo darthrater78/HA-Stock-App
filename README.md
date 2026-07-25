@@ -55,6 +55,10 @@ python3 -m unittest discover tests
 
 ## Version History
 
+### v2.3.2 — 2026-07-25
+- **Constrained `gql` to `<4`.** `monarchmoney` 0.1.15 requires `gql>=3.4` with no upper bound, and gql 4.0 changed `Client.execute_async` to take a request object. Installing `monarchmoney` therefore pulled gql 4 and every Monarch call failed with `TypeError: Client.execute_async() missing 1 required positional argument: 'request'` — affecting any other integration sharing the package
+- **Stopped re-authenticating on every failed poll.** A fetch failure discarded the Monarch session, so the next poll performed a full login. With a persistent fault that became a login attempt every poll interval, and Monarch answered with `HTTP 429: Too Many Requests` — locking out other integrations using the same account. The session is now retained on fetch failures, and failed logins back off exponentially from 60 seconds up to an hour
+
 ### v2.3.1 — 2026-07-25
 Fixes to the optional Node-RED example flow only. The integration itself is unchanged from v2.3.0.
 
