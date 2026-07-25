@@ -105,6 +105,10 @@
     "finnhub_self_test_failed": {
       "title": "Finnhub API self-test failed",
       "description": "The daily pre-market API connectivity test could not fetch a quote from Finnhub. Stock data may be unavailable today.\n\nTo fix: check your Finnhub API key and rate limits. This issue clears automatically when the next self-test succeeds."
+    },
+    "monarch_update_available": {
+      "title": "Monarch Money package update available",
+      "description": "A newer version of the monarchmoneycommunity package is available (installed: {installed}, latest: {latest}). Update HA Stock App via HACS to get the latest version, then restart Home Assistant."
     }
   }
 }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import time as dt_time
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback, CALLBACK_TYPE
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_call_later, async_track_point_in_time
 
 import voluptuous as vol
@@ -104,6 +106,48 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+MONARCH_PACKAGE = "monarchmoneycommunity"
+
+
+async def _check_monarch_update(hass: HomeAssistant, entry_id: str) -> None:
+    try:
+        installed = pkg_version(MONARCH_PACKAGE)
+    except Exception:
+        return
+    issue_id = f"monarch_update_available_{entry_id}"
+    try:
+        session = async_get_clientsession(hass)
+        async with session.get(
+            f"https://pypi.org/pypi/{MONARCH_PACKAGE}/json",
+            timeout=10,
+        ) as resp:
+            if resp.status != 200:
+                return
+            data = await resp.json()
+        latest = data.get("info", {}).get("version", "")
+        if not latest or latest == installed:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+            return
+        from packaging.version import Version
+        if Version(latest) > Version(installed):
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="monarch_update_available",
+                translation_placeholders={
+                    "installed": installed,
+                    "latest": latest,
+                },
+            )
+        else:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+    except Exception:
+        _LOGGER.debug("Failed to check for %s updates", MONARCH_PACKAGE)
+
+
 def _apply_debug_logging(entry: ConfigEntry) -> None:
     enabled = entry.options.get(CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING)
     ha_stock_logger = logging.getLogger("custom_components.ha_stock_app")
@@ -196,6 +240,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if not hass.services.has_service(DOMAIN, "test_notification"):
         _register_services(hass)
+
+    hass.async_create_task(_check_monarch_update(hass, entry.entry_id))
 
     return True
 
@@ -306,6 +352,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ir.async_delete_issue(hass, DOMAIN, f"monarch_auth_failed_{entry.entry_id}")
         ir.async_delete_issue(hass, DOMAIN, f"stock_api_failure_{entry.entry_id}")
         ir.async_delete_issue(hass, DOMAIN, f"finnhub_self_test_failed_{entry.entry_id}")
+        ir.async_delete_issue(hass, DOMAIN, f"monarch_update_available_{entry.entry_id}")
         if not hass.data[DOMAIN]:
             hass.services.async_remove(DOMAIN, "test_notification")
     return unload_ok
