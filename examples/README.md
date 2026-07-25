@@ -45,9 +45,13 @@ notification.
 
 Three layers, in the **Rate Limit + Test Tag** node:
 
+- **Duplicate collapse** — the same message is never delivered twice in quick
+  succession, test events included (5s window for tests, 10 minutes otherwise).
+  This is what makes the flow immune to being delivered the same event several
+  times, whether from a second deployed copy or a websocket subscription that
+  outlived a redeploy.
 - **Burst limit** — at most 5 notifications in any 60 seconds, *including test
-  events*. This is the backstop: nothing legitimate needs more, and it is what
-  stops a loop or a jammed test button from flooding a phone.
+  events*. The backstop: nothing legitimate needs more.
 - **Hourly ceiling** — at most 12 non-test notifications an hour.
 - **Per-title cooldown** — the same notification is not repeated within 10
   minutes. Price alerts instead fire once per whole-percent level with an hourly
@@ -75,7 +79,13 @@ A payload that reaches a formatter but lacks the event's fields is refused and
 logged as a warning. Without that, an unexpected payload still produced a
 notification — `undefined NaN%` and similar.
 
-State lives in Node-RED flow context and resets on redeploy.
+Limiter state lives in Node-RED **global** context, so every copy of the flow
+shares one budget rather than each getting its own. It resets when Node-RED
+restarts.
+
+If you ever see one event arrive as several notifications, restart Node-RED —
+the Home Assistant websocket node can leave a subscription behind across a
+redeploy, and each stale subscription redelivers every event.
 
 ### Customising
 
