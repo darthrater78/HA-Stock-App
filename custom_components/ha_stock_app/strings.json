@@ -24,10 +24,10 @@
       },
       "select_accounts": {
         "title": "Select Monarch Accounts",
-        "description": "Choose which Monarch Money accounts to import into Home Assistant.\n\nP&L accounts are used to calculate the Today's P&L sensor — select your brokerage and Roth IRA accounts (not 401k).",
+        "description": "**Accounts** — which Monarch accounts to create as sensors in Home Assistant (all types).\n\n**P&L Accounts** — which investment accounts to include in the Today's P&L sensor. Only accounts with stock holdings are shown. Select brokerage and IRA accounts; exclude 401k (uses delayed NAV).",
         "data": {
-          "monarch_accounts": "Accounts",
-          "pl_accounts": "Today's P&L Accounts"
+          "monarch_accounts": "Accounts (all types)",
+          "pl_accounts": "P&L Accounts (investment only)"
         }
       }
     },
@@ -66,10 +66,10 @@
       },
       "select_accounts": {
         "title": "Select Monarch Accounts",
-        "description": "Choose which Monarch Money accounts to import. Deselect accounts you don't want as sensors.\n\nP&L accounts are used to calculate the Today's P&L sensor — select your brokerage and Roth IRA accounts (not 401k).",
+        "description": "**Accounts** — which Monarch accounts to create as sensors (all types).\n\n**P&L Accounts** — which investment accounts to include in the Today's P&L sensor. Only accounts with stock holdings are shown. Select brokerage and IRA; exclude 401k (uses delayed NAV). The next step lets you map each holding to a live stock feed.",
         "data": {
-          "monarch_accounts": "Accounts",
-          "pl_accounts": "Today's P&L Accounts"
+          "monarch_accounts": "Accounts (all types)",
+          "pl_accounts": "P&L Accounts (investment only)"
         }
       },
       "pl_mapping": {
