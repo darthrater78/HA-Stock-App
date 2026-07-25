@@ -281,6 +281,19 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry
         self._options: dict = {}
+        self._cached_accounts: dict[str, str] | None = None
+
+    def _get_account_options(self) -> dict[str, str]:
+        if self._cached_accounts is not None:
+            return self._cached_accounts
+        result: dict[str, str] = {}
+        data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
+        coordinator = data.get("monarch_coordinator")
+        if coordinator and coordinator.data:
+            for acct_id, acct in coordinator.data.get("accounts", {}).items():
+                result[acct_id] = f"{acct.institution} - {acct.name}"
+        self._cached_accounts = result
+        return result
 
     async def async_step_init(self, user_input=None):
         errors = {}
@@ -405,22 +418,22 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
 
             return await self._after_pl_mapping()
 
-        account_options: dict[str, str] = {}
+        account_options = self._get_account_options()
         investment_options: dict[str, str] = {}
-        data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
-        coordinator = data.get("monarch_coordinator")
+        entry_data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
+        coordinator = entry_data.get("monarch_coordinator")
         if coordinator and coordinator.data:
             acct_tickers: dict[str, list[str]] = {}
             for h in coordinator.data.get("holdings", {}).values():
                 ticker = (h.ticker or h.name[:10]).upper()
                 acct_tickers.setdefault(h.account_id, []).append(ticker)
 
-            for acct_id, acct in coordinator.data.get("accounts", {}).items():
-                label = f"{acct.institution} - {acct.name}"
-                account_options[acct_id] = label
+            for acct_id in account_options:
                 if acct_id in acct_tickers:
+                    acct = coordinator.data.get("accounts", {}).get(acct_id)
+                    name = acct.name if acct else acct_id
                     tickers = ", ".join(sorted(set(acct_tickers[acct_id])))
-                    investment_options[acct_id] = f"{acct.name} [{tickers}]"
+                    investment_options[acct_id] = f"{name} [{tickers}]"
 
         if not account_options:
             return await self._after_pl_mapping()
@@ -574,13 +587,12 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         schema_dict = {}
 
         if self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False):
-            account_options: dict[str, str] = {"": "All cash accounts (default)"}
-            data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
-            coordinator = data.get("monarch_coordinator")
-            if coordinator and coordinator.data:
-                for acct_id, acct in coordinator.data.get("accounts", {}).items():
-                    account_options[acct_id] = f"{acct.institution} - {acct.name}"
-            schema_dict[vol.Optional(CONF_PAYCHECK_ACCOUNT, default=opts.get(CONF_PAYCHECK_ACCOUNT, ""))] = vol.In(account_options)
+            paycheck_options: dict[str, str] = {"": "All cash accounts (default)"}
+            selected = set(self._config_entry.data.get(CONF_MONARCH_ACCOUNTS, []))
+            for acct_id, label in self._get_account_options().items():
+                if not selected or acct_id in selected:
+                    paycheck_options[acct_id] = label
+            schema_dict[vol.Optional(CONF_PAYCHECK_ACCOUNT, default=opts.get(CONF_PAYCHECK_ACCOUNT, ""))] = vol.In(paycheck_options)
             schema_dict[vol.Optional(CONF_PAYCHECK_THRESHOLD, default=opts.get(CONF_PAYCHECK_THRESHOLD, DEFAULT_PAYCHECK_THRESHOLD))] = vol.All(
                 vol.Coerce(float), vol.Range(min=100.0, max=50000.0)
             )
