@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import stat
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -58,6 +59,11 @@ class MonarchClient:
         self._mfa_secret = mfa_secret
         self._session_dir = session_dir
         self._mm: MonarchMoney | None = None
+        # Monarch rate-limits logins (HTTP 429). A persistent fault must not turn
+        # every poll into a fresh login attempt -- that is what turns one broken
+        # dependency into an account-wide lockout affecting other integrations.
+        self._last_login_attempt: float = 0.0
+        self._login_backoff: float = 0.0
 
     @property
     def _session_file(self) -> Path | None:
@@ -80,6 +86,14 @@ class MonarchClient:
         self._mfa_secret = ""
 
     async def authenticate(self) -> bool:
+        now = time.monotonic()
+        if self._login_backoff and now - self._last_login_attempt < self._login_backoff:
+            remaining = int(self._login_backoff - (now - self._last_login_attempt))
+            _LOGGER.debug(
+                "Monarch Money: skipping login, backing off for another %ds", remaining
+            )
+            return False
+        self._last_login_attempt = now
         try:
             self._mm = MonarchMoney()
 
@@ -113,9 +127,18 @@ class MonarchClient:
 
             self._save_session()
             self._clear_credentials()
+            self._login_backoff = 0.0
             return True
         except Exception as exc:
-            _LOGGER.error("Monarch Money login failed: %s", type(exc).__name__)
+            # Exponential backoff capped at an hour, so repeated failures stop
+            # hammering the login endpoint.
+            self._login_backoff = min(
+                max(self._login_backoff * 2, 60.0), 3600.0
+            )
+            _LOGGER.error(
+                "Monarch Money login failed: %s (next attempt in %ds)",
+                type(exc).__name__, int(self._login_backoff),
+            )
             _LOGGER.debug("Monarch Money login failure details", exc_info=True)
             self._mm = None
             return False
@@ -141,9 +164,12 @@ class MonarchClient:
                 )
             return accounts
         except Exception as exc:
+            # Deliberately does NOT discard the session. A failure here is
+            # usually a data or dependency fault, not an expired login -- and
+            # discarding it forced a fresh login on the very next poll, which
+            # is how a persistent error became a stream of 429s.
             _LOGGER.error("Monarch Money fetch failed: %s", type(exc).__name__)
             _LOGGER.debug("Monarch Money fetch failure details", exc_info=True)
-            self._mm = None
             return []
 
     async def get_holdings(self, account_id: str, account_name: str = "") -> list[MonarchHolding]:
