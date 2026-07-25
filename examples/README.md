@@ -41,13 +41,25 @@ delivers.
 `stock_update` fires on every poll and is intentionally not wired to a
 notification.
 
-### Repeat suppression
+### Rate limiting
 
-Price alerts fire once per whole-percent level with an hourly cooldown, so a
-stock drifting around +1.2% notifies once rather than on every poll. Crossing to
-the next level notifies again, and each symbol is tracked separately. Finnhub
-errors are deduped for two hours. State lives in Node-RED flow context and
-resets on redeploy.
+Three layers, in the **Rate Limit + Test Tag** node:
+
+- **Burst limit** — at most 5 notifications in any 60 seconds, *including test
+  events*. This is the backstop: nothing legitimate needs more, and it is what
+  stops a loop or a jammed test button from flooding a phone.
+- **Hourly ceiling** — at most 12 non-test notifications an hour.
+- **Per-title cooldown** — the same notification is not repeated within 10
+  minutes. Price alerts instead fire once per whole-percent level with an hourly
+  cooldown, so a stock hovering at +1.2% notifies once rather than every poll.
+  Finnhub errors are deduped for two hours.
+
+Each **Format …** node also refuses to build a notification from a payload that
+lacks the event's fields, logging the raw payload as a warning instead. Without
+that, an unexpected payload still produced a notification — `undefined NaN%` and
+similar — which is how malformed events turned into a flood.
+
+State lives in Node-RED flow context and resets on redeploy.
 
 ### Customising
 
