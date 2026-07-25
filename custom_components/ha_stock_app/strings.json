@@ -24,9 +24,10 @@
       },
       "select_accounts": {
         "title": "Select Monarch Accounts",
-        "description": "Choose which Monarch Money accounts to import into Home Assistant.",
+        "description": "Choose which Monarch Money accounts to import into Home Assistant.\n\nP&L accounts are used to calculate the Today's P&L sensor — select your brokerage and Roth IRA accounts (not 401k).",
         "data": {
-          "monarch_accounts": "Accounts"
+          "monarch_accounts": "Accounts",
+          "pl_accounts": "Today's P&L Accounts"
         }
       }
     },
@@ -65,9 +66,10 @@
       },
       "select_accounts": {
         "title": "Select Monarch Accounts",
-        "description": "Choose which Monarch Money accounts to import. Deselect accounts you don't want as sensors.",
+        "description": "Choose which Monarch Money accounts to import. Deselect accounts you don't want as sensors.\n\nP&L accounts are used to calculate the Today's P&L sensor — select your brokerage and Roth IRA accounts (not 401k).",
         "data": {
-          "monarch_accounts": "Accounts"
+          "monarch_accounts": "Accounts",
+          "pl_accounts": "Today's P&L Accounts"
         }
       },
       "advanced": {

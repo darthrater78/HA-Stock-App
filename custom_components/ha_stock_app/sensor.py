@@ -17,7 +17,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_MONARCH_ACCOUNTS, DOMAIN, device_info
+from .const import CONF_MONARCH_ACCOUNTS, CONF_PL_ACCOUNTS, DOMAIN, device_info
 from .coordinator import StockCoordinator, MonarchCoordinator
 from .market import NYSECalendar, market_now
 
@@ -52,6 +52,10 @@ async def async_setup_entry(
         for holding_id, holding in monarch_coordinator.data.get("holdings", {}).items():
             if not selected_accounts or holding.account_id in selected_accounts:
                 entities.append(MonarchHoldingSensor(monarch_coordinator, holding, entry))
+
+        pl_accounts = entry.data.get(CONF_PL_ACCOUNTS, [])
+        if pl_accounts:
+            entities.append(TodayPLSensor(monarch_coordinator, pl_accounts, entry))
 
     async_add_entities(entities, update_before_add=True)
 
@@ -275,6 +279,62 @@ class MonarchNetWorthSensor(CoordinatorEntity, SensorEntity):
         if not self.coordinator.data:
             return {}
         return {"breakdown": self.coordinator.data.get("totals", {})}
+
+
+class TodayPLSensor(CoordinatorEntity, SensorEntity):
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_native_unit_of_measurement = "USD"
+    _attr_icon = "mdi:currency-usd"
+
+    def __init__(
+        self,
+        coordinator: MonarchCoordinator,
+        pl_account_ids: list[str],
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self._pl_account_ids = set(pl_account_ids)
+        self._attr_unique_id = f"{DOMAIN}_today_pl"
+        self._attr_name = "Today's P&L"
+        self._attr_device_info = device_info(entry)
+
+    def _included_holdings(self) -> list[MonarchHolding]:
+        if not self.coordinator.data:
+            return []
+        return [
+            h
+            for h in self.coordinator.data.get("holdings", {}).values()
+            if h.account_id in self._pl_account_ids
+        ]
+
+    @property
+    def native_value(self) -> float | None:
+        holdings = self._included_holdings()
+        if not holdings:
+            return None
+        total = 0.0
+        for h in holdings:
+            pct = h.one_day_change_pct
+            if pct and (100 + pct) != 0:
+                total += h.value * pct / (100 + pct)
+        return round(total, 2)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        holdings = self._included_holdings()
+        if not holdings:
+            return {}
+        breakdown = {}
+        for h in holdings:
+            pct = h.one_day_change_pct
+            daily_change = 0.0
+            if pct and (100 + pct) != 0:
+                daily_change = h.value * pct / (100 + pct)
+            label = h.ticker if h.ticker != "N/A" else h.name[:20]
+            key = f"{label} ({h.account_name})"
+            breakdown[key] = round(daily_change, 2)
+        return {"breakdown": breakdown, "holding_count": len(holdings)}
 
 
 class MonarchPackageVersionSensor(SensorEntity):

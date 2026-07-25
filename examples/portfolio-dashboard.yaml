@@ -1,0 +1,305 @@
+# Portfolio Dashboard for HA Stock App
+#
+# Drop this into a Home Assistant dashboard view.
+# Requires: HA Stock App integration, custom:mushroom-template-card,
+#           custom:sankey-chart (optional, for allocation view).
+#
+# Entity IDs below assume the default names from HA Stock App.
+# Adjust if you've renamed entities in the HA entity registry.
+
+title: Portfolio
+path: portfolio
+type: sections
+icon: mdi:chart-line
+badges: []
+cards: []
+sections:
+  - type: grid
+    columns: 1
+    cards:
+      - type: heading
+        heading: Controls
+      - type: tile
+        grid_options:
+          columns: 12
+          rows: 1
+        entity: button.ha_stock_app_refresh_stock_prices
+        vertical: false
+        features:
+          - type: button
+        features_position: inline
+      - type: tile
+        grid_options:
+          columns: 12
+          rows: 1
+        entity: button.ha_stock_app_refresh_monarch_accounts
+        vertical: false
+        features:
+          - type: button
+        features_position: inline
+  - type: grid
+    columns: 2
+    cards:
+      - type: heading
+        heading: Positions
+      - type: custom:mushroom-template-card
+        primary: Market
+        multiline_secondary: true
+        secondary: "{{ states('sensor.ha_stock_app_market_status') }}"
+        icon: >
+          {% set s = states('sensor.ha_stock_app_market_status') %}
+          {% if s == 'Open' %}mdi:chart-line
+          {% elif s == 'Early Close' %}mdi:clock-alert
+          {% else %}mdi:chart-line-variant{% endif %}
+        icon_color: >
+          {% set s = states('sensor.ha_stock_app_market_status') %}
+          {% if s == 'Open' %}green
+          {% elif s == 'Early Close' %}orange
+          {% else %}grey{% endif %}
+        badge_icon: >
+          {% if states('sensor.ha_stock_app_market_status') == 'Open'
+          %}mdi:circle{% else %}mdi:circle-off{% endif %}
+        badge_color: >
+          {% if states('sensor.ha_stock_app_market_status') == 'Open'
+          %}green{% else %}red{% endif %}
+        tap_action:
+          action: none
+      - type: custom:mushroom-template-card
+        primary: Last Poll
+        multiline_secondary: true
+        secondary: >
+          {% set ts = states('sensor.ha_stock_app_last_stock_poll') %}
+          {% if ts in ['unknown', 'unavailable', 'None'] %}
+            No data yet
+          {% else %}
+            {% set diff = (as_timestamp(now()) - as_timestamp(ts, 0)) | int %}
+            {% if diff < 60 %}{{ diff }}s ago
+            {% elif diff < 3600 %}{{ (diff / 60) | int }}m ago
+            {% else %}{{ (diff / 3600) | int }}h ago{% endif %}
+          {% endif %}
+        icon: mdi:clock-outline
+        icon_color: >
+          {% set ts = states('sensor.ha_stock_app_last_stock_poll') %}
+          {% if ts in ['unknown', 'unavailable', 'None'] %}red
+          {% else %}
+            {% set diff = (as_timestamp(now()) - as_timestamp(ts, 0)) | int %}
+            {% if diff < 360 %}green{% elif diff < 600 %}yellow{% else %}red{% endif %}
+          {% endif %}
+        tap_action:
+          action: none
+      - type: custom:mushroom-template-card
+        primary: VOO
+        multiline_secondary: true
+        secondary: >-
+          ${{ states('sensor.ha_stock_app_voo_stock_price') | float(0) | round(2) }}
+          · {% set p = state_attr('sensor.ha_stock_app_voo_stock_price', 'change_percent') | float(0) %}{% if p >= 0 %}+{% endif %}{{ p | round(2) }}%
+
+          {% set h = states('sensor.ha_stock_app_monarch_voo_individual_tod_1176') | float(0) %}{% set dc = h * (p / 100) / (1 + p / 100) %}${{ '{:,.0f}'.format(h) }} · {% if dc >= 0 %}+{% else %}-{% endif %}${{ '{:,.0f}'.format(dc | abs) }}
+        icon: mdi:chart-line
+        icon_color: >
+          {% set p = state_attr('sensor.ha_stock_app_voo_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 1 %}green{% elif p <= -1 %}red{% else %}yellow{% endif %}
+        badge_icon: >
+          {% set p = state_attr('sensor.ha_stock_app_voo_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 0 %}mdi:trending-up{% else %}mdi:trending-down{% endif %}
+        badge_color: >
+          {% set p = state_attr('sensor.ha_stock_app_voo_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 0 %}green{% else %}red{% endif %}
+        tap_action:
+          action: none
+      - type: custom:mushroom-template-card
+        primary: VTI
+        multiline_secondary: true
+        secondary: >-
+          ${{ states('sensor.ha_stock_app_vti_stock_price') | float(0) | round(2) }}
+          · {% set p = state_attr('sensor.ha_stock_app_vti_stock_price', 'change_percent') | float(0) %}{% if p >= 0 %}+{% endif %}{{ p | round(2) }}%
+
+          {% set h = states('sensor.ha_stock_app_monarch_vti_roth_ira_6552') | float(0) %}{% set dc = h * (p / 100) / (1 + p / 100) %}${{ '{:,.0f}'.format(h) }} · {% if dc >= 0 %}+{% else %}-{% endif %}${{ '{:,.0f}'.format(dc | abs) }}
+        icon: mdi:chart-bell-curve
+        icon_color: >
+          {% set p = state_attr('sensor.ha_stock_app_vti_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 1 %}green{% elif p <= -1 %}red{% else %}yellow{% endif %}
+        badge_icon: >
+          {% set p = state_attr('sensor.ha_stock_app_vti_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 0 %}mdi:trending-up{% else %}mdi:trending-down{% endif %}
+        badge_color: >
+          {% set p = state_attr('sensor.ha_stock_app_vti_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 0 %}green{% else %}red{% endif %}
+        tap_action:
+          action: none
+      - type: custom:mushroom-template-card
+        primary: NVDA
+        multiline_secondary: true
+        secondary: >-
+          ${{ states('sensor.ha_stock_app_nvda_stock_price') | float(0) | round(2) }}
+          · {% set p = state_attr('sensor.ha_stock_app_nvda_stock_price', 'change_percent') | float(0) %}{% if p >= 0 %}+{% endif %}{{ p | round(2) }}%
+
+          {% set h = states('sensor.ha_stock_app_monarch_nvda_individual_tod_1176') | float(0) %}{% set dc = h * (p / 100) / (1 + p / 100) %}${{ '{:,.0f}'.format(h) }} · {% if dc >= 0 %}+{% else %}-{% endif %}${{ '{:,.0f}'.format(dc | abs) }}
+        icon: mdi:memory
+        icon_color: >
+          {% set p = state_attr('sensor.ha_stock_app_nvda_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 2 %}green{% elif p <= -2 %}red{% else %}yellow{% endif %}
+        badge_icon: >
+          {% set p = state_attr('sensor.ha_stock_app_nvda_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 0 %}mdi:trending-up{% else %}mdi:trending-down{% endif %}
+        badge_color: >
+          {% set p = state_attr('sensor.ha_stock_app_nvda_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 0 %}green{% else %}red{% endif %}
+        tap_action:
+          action: none
+      - type: custom:mushroom-template-card
+        primary: HPE
+        multiline_secondary: true
+        secondary: >-
+          ${{ states('sensor.ha_stock_app_hpe_stock_price') | float(0) | round(2) }}
+          · {% set p = state_attr('sensor.ha_stock_app_hpe_stock_price', 'change_percent') | float(0) %}{% if p >= 0 %}+{% endif %}{{ p | round(2) }}%
+
+          {% set h = states('sensor.ha_stock_app_monarch_hpe_individual_tod_1176') | float(0) %}{% set dc = h * (p / 100) / (1 + p / 100) %}${{ '{:,.0f}'.format(h) }} · {% if dc >= 0 %}+{% else %}-{% endif %}${{ '{:,.0f}'.format(dc | abs) }}
+        icon: mdi:server
+        icon_color: >
+          {% set p = state_attr('sensor.ha_stock_app_hpe_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 2 %}green{% elif p <= -2 %}red{% else %}yellow{% endif %}
+        badge_icon: >
+          {% set p = state_attr('sensor.ha_stock_app_hpe_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 0 %}mdi:trending-up{% else %}mdi:trending-down{% endif %}
+        badge_color: >
+          {% set p = state_attr('sensor.ha_stock_app_hpe_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 0 %}green{% else %}red{% endif %}
+        tap_action:
+          action: none
+      - type: custom:mushroom-template-card
+        primary: ANET
+        multiline_secondary: true
+        secondary: >-
+          ${{ states('sensor.ha_stock_app_anet_stock_price') | float(0) | round(2) }}
+          · {% set p = state_attr('sensor.ha_stock_app_anet_stock_price', 'change_percent') | float(0) %}{% if p >= 0 %}+{% endif %}{{ p | round(2) }}%
+
+          {% set h = states('sensor.ha_stock_app_monarch_anet_individual_tod_1176') | float(0) %}{% set dc = h * (p / 100) / (1 + p / 100) %}${{ '{:,.0f}'.format(h) }} · {% if dc >= 0 %}+{% else %}-{% endif %}${{ '{:,.0f}'.format(dc | abs) }}
+        icon: mdi:switch
+        icon_color: >
+          {% set p = state_attr('sensor.ha_stock_app_anet_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 2 %}green{% elif p <= -2 %}red{% else %}yellow{% endif %}
+        badge_icon: >
+          {% set p = state_attr('sensor.ha_stock_app_anet_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 0 %}mdi:trending-up{% else %}mdi:trending-down{% endif %}
+        badge_color: >
+          {% set p = state_attr('sensor.ha_stock_app_anet_stock_price', 'change_percent') | float(0) %}
+          {% if p >= 0 %}green{% else %}red{% endif %}
+        tap_action:
+          action: none
+      - type: custom:mushroom-template-card
+        primary: Today's P&L
+        multiline_secondary: true
+        secondary: >
+          {% set t = states('sensor.ha_stock_app_today_s_p_l') | float(0) %}
+          {% if t >= 0 %}+{% else %}-{% endif %}${{ '{:,.0f}'.format(t | abs) }}
+        icon: mdi:currency-usd
+        icon_color: >
+          {% if states('sensor.ha_stock_app_today_s_p_l') | float(0) >= 0
+          %}green{% else %}red{% endif %}
+        tap_action:
+          action: none
+  - type: grid
+    columns: 1
+    cards:
+      - type: heading
+        heading: Today's Performance
+      - type: history-graph
+        entities:
+          - entity: sensor.ha_stock_app_nvda_stock_price
+            name: NVDA
+          - entity: sensor.ha_stock_app_hpe_stock_price
+            name: HPE
+          - entity: sensor.ha_stock_app_anet_stock_price
+            name: ANET
+        title: Stocks Price
+        hours_to_show: 9
+      - type: history-graph
+        title: ETFs Price
+        entities:
+          - entity: sensor.ha_stock_app_voo_stock_price
+            name: VOO
+          - entity: sensor.ha_stock_app_vti_stock_price
+            name: VTI
+        hours_to_show: 8
+      - type: history-graph
+        title: Holdings Value
+        entities:
+          - entity: sensor.ha_stock_app_monarch_voo_individual_tod_1176
+            name: VOO
+          - entity: sensor.ha_stock_app_monarch_vti_roth_ira_6552
+            name: VTI
+          - entity: sensor.ha_stock_app_monarch_nvda_individual_tod_1176
+            name: NVDA
+          - entity: sensor.ha_stock_app_monarch_hpe_individual_tod_1176
+            name: HPE
+          - entity: sensor.ha_stock_app_monarch_anet_individual_tod_1176
+            name: ANET
+          - entity: sensor.ha_stock_app_monarch_legal_general_s_p_trinet_401k_island_technology_inc_5901
+            name: 401k
+        hours_to_show: 8
+  - type: grid
+    columns: 1
+    cards:
+      - type: heading
+        heading: Allocation
+      - type: custom:sankey-chart
+        title: Portfolio Allocation
+        layout: horizontal
+        height: 250
+        unit_prefix: k
+        round: 1
+        min_box_size: 20
+        min_box_distance: 8
+        show_states: true
+        show_units: true
+        show_names: true
+        show_icons: false
+        wide: true
+        min_state: 0
+        ignore_missing_entities: true
+        sort_dir: desc
+        sections:
+          - entities:
+              - entity_id: sensor.ha_stock_app_monarch_fidelity_individual_tod_1176
+                name: Brokerage
+                color: var(--primary-color)
+                children:
+                  - sensor.ha_stock_app_monarch_voo_individual_tod_1176
+                  - sensor.ha_stock_app_monarch_nvda_individual_tod_1176
+                  - sensor.ha_stock_app_monarch_hpe_individual_tod_1176
+                  - sensor.ha_stock_app_monarch_anet_individual_tod_1176
+              - entity_id: sensor.ha_stock_app_monarch_fidelity_roth_ira_6552
+                name: Roth IRA
+                color: "#2196F3"
+                children:
+                  - sensor.ha_stock_app_monarch_vti_roth_ira_6552
+                  - sensor.ha_stock_app_monarch_whosx_roth_ira_6552
+              - entity_id: sensor.ha_stock_app_monarch_empower_retirement_trinet_401k_island_technology_inc_5901
+                name: 401k
+                color: "#FF9800"
+                children:
+                  - sensor.ha_stock_app_monarch_legal_general_s_p_trinet_401k_island_technology_inc_5901
+          - entities:
+              - entity_id: sensor.ha_stock_app_monarch_voo_individual_tod_1176
+                name: VOO
+                color: "#00BCD4"
+              - entity_id: sensor.ha_stock_app_monarch_nvda_individual_tod_1176
+                name: NVDA
+                color: "#76FF03"
+              - entity_id: sensor.ha_stock_app_monarch_hpe_individual_tod_1176
+                name: HPE
+                color: "#FF6D00"
+              - entity_id: sensor.ha_stock_app_monarch_anet_individual_tod_1176
+                name: ANET
+                color: "#E040FB"
+              - entity_id: sensor.ha_stock_app_monarch_vti_roth_ira_6552
+                name: VTI
+                color: "#2196F3"
+              - entity_id: sensor.ha_stock_app_monarch_whosx_roth_ira_6552
+                name: WHOSX
+                color: "#4DB6AC"
+              - entity_id: sensor.ha_stock_app_monarch_legal_general_s_p_trinet_401k_island_technology_inc_5901
+                name: 401k S&P
+                color: "#FF9800"
+max_columns: 1

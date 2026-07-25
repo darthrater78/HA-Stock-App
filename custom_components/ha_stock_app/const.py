@@ -81,6 +81,7 @@ MARKET_TIMEZONES = {
 }
 
 CONF_MONARCH_ACCOUNTS = "monarch_accounts"
+CONF_PL_ACCOUNTS = "pl_accounts"
 CONF_ENABLE_DEBUG_LOGGING = "enable_debug_logging"
 DEFAULT_ENABLE_DEBUG_LOGGING = False
 PROVIDERS = {

@@ -23,6 +23,7 @@ from .const import (
     CONF_MONARCH_MFA_SECRET,
     CONF_ALERT_THRESHOLD,
     CONF_MONARCH_ACCOUNTS,
+    CONF_PL_ACCOUNTS,
     CONF_ENABLE_MARKET_HOURS,
     CONF_ENABLE_EOD_SUMMARY,
     CONF_ENABLE_MARKET_OPEN_EVENT,
@@ -243,6 +244,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_select_accounts(self, user_input=None):
         if user_input is not None:
             self._data[CONF_MONARCH_ACCOUNTS] = user_input.get(CONF_MONARCH_ACCOUNTS, [])
+            self._data[CONF_PL_ACCOUNTS] = user_input.get(CONF_PL_ACCOUNTS, [])
             return self.async_create_entry(title="HA Stock App", data=self._data)
 
         account_options = {
@@ -254,6 +256,10 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required(
                     CONF_MONARCH_ACCOUNTS,
+                    default=[],
+                ): cv.multi_select(account_options),
+                vol.Optional(
+                    CONF_PL_ACCOUNTS,
                     default=[],
                 ): cv.multi_select(account_options),
             }),
@@ -385,6 +391,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             new_data = {**self._config_entry.data}
             new_data[CONF_MONARCH_ACCOUNTS] = user_input.get(CONF_MONARCH_ACCOUNTS, [])
+            new_data[CONF_PL_ACCOUNTS] = user_input.get(CONF_PL_ACCOUNTS, [])
             self.hass.config_entries.async_update_entry(self._config_entry, data=new_data)
 
             needs_advanced = (
@@ -414,12 +421,19 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         current_selected = self._config_entry.data.get(
             CONF_MONARCH_ACCOUNTS, []
         )
+        current_pl = self._config_entry.data.get(
+            CONF_PL_ACCOUNTS, []
+        )
         return self.async_show_form(
             step_id="select_accounts",
             data_schema=vol.Schema({
                 vol.Required(
                     CONF_MONARCH_ACCOUNTS,
                     default=current_selected,
+                ): cv.multi_select(account_options),
+                vol.Optional(
+                    CONF_PL_ACCOUNTS,
+                    default=current_pl,
                 ): cv.multi_select(account_options),
             }),
         )
