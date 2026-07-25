@@ -12,31 +12,15 @@
           "alert_threshold": "Alert Threshold (%)"
         }
       },
-      "test_stock_api_success": {
-        "title": "Connection Successful",
-        "description": "{provider} API is working. Fetched {symbol} at {price} ({change}).\n\nClick Submit to continue."
-      },
-      "test_stock_api_failed": {
-        "title": "Connection Failed",
-        "description": "Could not fetch a quote from {provider} for {symbol}. Check your API key and try again.\n\nClick Submit to go back."
-      },
       "monarch": {
         "title": "Monarch Money (Optional)",
-        "description": "Optionally connect Monarch Money to track account balances and detect paychecks.\n\nThis integration uses the unofficial monarchmoney Python package (github.com/hammem/monarchmoney) to access your Monarch Money data. Your credentials are stored locally in your Home Assistant config and are only used to authenticate directly with Monarch Money. This project is not affiliated with or endorsed by Monarch Money.",
+        "description": "{stock_result}\n\nOptionally connect Monarch Money to track account balances and detect paychecks.\n\nThis integration uses the unofficial monarchmoney Python package (github.com/hammem/monarchmoney) to access your Monarch Money data. Your credentials are stored locally in your Home Assistant config and are only used to authenticate directly with Monarch Money. This project is not affiliated with or endorsed by Monarch Money.",
         "data": {
           "monarch_enabled": "Enable Monarch Money",
           "monarch_email": "Monarch Email",
           "monarch_password": "Monarch Password",
           "monarch_mfa_secret": "TOTP Secret Key (if MFA enabled)"
         }
-      },
-      "test_monarch_success": {
-        "title": "Monarch Connected",
-        "description": "Successfully authenticated with Monarch Money. Found {account_count} accounts.\n\nClick Submit to finish setup."
-      },
-      "test_monarch_failed": {
-        "title": "Monarch Connection Failed",
-        "description": "{error}\n\nClick Submit to go back and try again."
       },
       "select_accounts": {
         "title": "Select Monarch Accounts",
@@ -48,6 +32,7 @@
     },
     "error": {
       "no_stocks": "Enter at least one stock symbol.",
+      "stock_api_failed": "Could not fetch a quote. Check your API key and try again.",
       "monarch_auth_failed": "Monarch Money login failed. Check your credentials.",
       "monarch_missing_credentials": "Email and password are required when Monarch is enabled.",
       "invalid_symbols": "One or more symbols are invalid. Use 1-10 characters: letters, numbers, dots, or hyphens."
