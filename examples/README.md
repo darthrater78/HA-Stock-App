@@ -54,15 +54,26 @@ Three layers, in the **Rate Limit + Test Tag** node:
   cooldown, so a stock hovering at +1.2% notifies once rather than every poll.
   Finnhub errors are deduped for two hours.
 
-Each **Format …** node filters on `event_type` itself before doing anything
-else. Some versions of `node-red-contrib-home-assistant-websocket` do not honour
-the `server-events` node's own event-type filter and deliver every event on the
-bus — including `state_changed`, which fires hundreds of times a minute. Checking
-in the function makes the flow correct regardless of which version is installed.
+### Shape
 
-A payload that passes the type check but lacks the event's fields is also
-refused, and logged as a warning. Without both guards an unexpected payload still
-produced a notification — `undefined NaN%` and similar.
+```
+HA Stock App Events  ->  Route by Event Type  ->  Format <event>  ->  Rate Limit  ->  Mobile Notify
+   (one subscription)      (drops everything        (only the one
+                            not ours, dispatches     that matched)
+                            to exactly one output)
+```
+
+One subscription, not eight. Some versions of
+`node-red-contrib-home-assistant-websocket` do not honour the `server-events`
+node's own event-type filter and deliver every event on the bus — including
+`state_changed`, which fires hundreds of times a minute in a normal install. With
+a listener per event that meant eight function nodes waking for every state
+change. The router does one string comparison and drops anything that is not
+this integration's, then sends the event to exactly one formatter.
+
+A payload that reaches a formatter but lacks the event's fields is refused and
+logged as a warning. Without that, an unexpected payload still produced a
+notification — `undefined NaN%` and similar.
 
 State lives in Node-RED flow context and resets on redeploy.
 
