@@ -3,12 +3,15 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from importlib.metadata import version as pkg_version
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -36,6 +39,7 @@ async def async_setup_entry(
     stock_coordinator: StockCoordinator = data["stock_coordinator"]
     entities.append(MarketStatusSensor(stock_coordinator, entry))
     entities.append(LastPollSensor(stock_coordinator, entry))
+    entities.append(MonarchPackageVersionSensor(entry))
     for symbol in stock_coordinator.stocks:
         entities.append(StockPriceSensor(stock_coordinator, symbol, entry))
 
@@ -271,3 +275,20 @@ class MonarchNetWorthSensor(CoordinatorEntity, SensorEntity):
         if not self.coordinator.data:
             return {}
         return {"breakdown": self.coordinator.data.get("totals", {})}
+
+
+class MonarchPackageVersionSensor(SensorEntity):
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:package-variant"
+
+    def __init__(self, entry: ConfigEntry) -> None:
+        self._attr_unique_id = f"{DOMAIN}_monarch_package_version"
+        self._attr_name = "Monarch Package Version"
+        self._attr_device_info = device_info(entry)
+
+    @property
+    def native_value(self) -> str | None:
+        try:
+            return pkg_version("monarchmoneycommunity")
+        except Exception:
+            return None

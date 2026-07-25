@@ -134,13 +134,14 @@ async def _check_monarch_update(hass: HomeAssistant, entry_id: str) -> None:
                 hass,
                 DOMAIN,
                 issue_id,
-                is_fixable=False,
+                is_fixable=True,
                 severity=ir.IssueSeverity.WARNING,
                 translation_key="monarch_update_available",
                 translation_placeholders={
                     "installed": installed,
                     "latest": latest,
                 },
+                data={"installed": installed, "latest": latest},
             )
         else:
             ir.async_delete_issue(hass, DOMAIN, issue_id)

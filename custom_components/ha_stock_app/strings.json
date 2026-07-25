@@ -108,7 +108,18 @@
     },
     "monarch_update_available": {
       "title": "Monarch Money package update available",
-      "description": "A newer version of the monarchmoneycommunity package is available (installed: {installed}, latest: {latest}). Update HA Stock App via HACS to get the latest version, then restart Home Assistant."
+      "description": "A newer version of the monarchmoneycommunity package is available (installed: {installed}, latest: {latest}).",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Update Monarch Money Package",
+            "description": "This will upgrade monarchmoneycommunity from {installed} to {latest}. A Home Assistant restart will be required afterward."
+          }
+        },
+        "abort": {
+          "update_failed": "The package upgrade failed. Check the Home Assistant logs for details, or try updating manually with HACS."
+        }
+      }
     }
   }
 }

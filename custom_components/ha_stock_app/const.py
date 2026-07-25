@@ -1,5 +1,9 @@
+import json as _json
+from pathlib import Path as _Path
+
 DOMAIN = "ha_stock_app"
 PLATFORMS = ["sensor", "button", "select"]
+VERSION = _json.loads((_Path(__file__).parent / "manifest.json").read_text())["version"]
 
 CONF_STOCKS = "stocks"
 CONF_API_PROVIDER = "api_provider"
@@ -92,4 +96,5 @@ def device_info(entry) -> dict:
         name="HA Stock App",
         manufacturer="HA Stock App",
         model="Stock & Finance Tracker",
+        sw_version=VERSION,
     )
