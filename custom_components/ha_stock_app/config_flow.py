@@ -24,6 +24,7 @@ from .const import (
     CONF_ALERT_THRESHOLD,
     CONF_MONARCH_ACCOUNTS,
     CONF_PL_ACCOUNTS,
+    CONF_PL_TICKER_MAP,
     CONF_ENABLE_MARKET_HOURS,
     CONF_ENABLE_EOD_SUMMARY,
     CONF_ENABLE_MARKET_OPEN_EVENT,
@@ -394,13 +395,10 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             new_data[CONF_PL_ACCOUNTS] = user_input.get(CONF_PL_ACCOUNTS, [])
             self.hass.config_entries.async_update_entry(self._config_entry, data=new_data)
 
-            needs_advanced = (
-                self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False)
-                or self._options.get(CONF_ENABLE_401K_REPORTING, False)
-            )
-            if needs_advanced:
-                return await self.async_step_advanced()
-            return self.async_create_entry(title="", data=self._options)
+            if new_data[CONF_PL_ACCOUNTS]:
+                return await self.async_step_pl_mapping()
+
+            return await self._after_pl_mapping()
 
         account_options: dict[str, str] = {}
         data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
@@ -410,13 +408,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                 account_options[acct_id] = f"{acct.institution} - {acct.name}"
 
         if not account_options:
-            needs_advanced = (
-                self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False)
-                or self._options.get(CONF_ENABLE_401K_REPORTING, False)
-            )
-            if needs_advanced:
-                return await self.async_step_advanced()
-            return self.async_create_entry(title="", data=self._options)
+            return await self._after_pl_mapping()
 
         current_selected = self._config_entry.data.get(
             CONF_MONARCH_ACCOUNTS, []
@@ -436,6 +428,80 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                     default=current_pl,
                 ): cv.multi_select(account_options),
             }),
+        )
+
+    async def _after_pl_mapping(self):
+        needs_advanced = (
+            self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False)
+            or self._options.get(CONF_ENABLE_401K_REPORTING, False)
+        )
+        if needs_advanced:
+            return await self.async_step_advanced()
+        return self.async_create_entry(title="", data=self._options)
+
+    async def async_step_pl_mapping(self, user_input=None):
+        if user_input is not None:
+            new_data = {**self._config_entry.data}
+            new_data[CONF_PL_TICKER_MAP] = dict(user_input)
+            self.hass.config_entries.async_update_entry(
+                self._config_entry, data=new_data
+            )
+            return await self._after_pl_mapping()
+
+        entry_data = self.hass.data.get(DOMAIN, {}).get(
+            self._config_entry.entry_id, {}
+        )
+        monarch_coordinator = entry_data.get("monarch_coordinator")
+        stock_coordinator = entry_data.get("stock_coordinator")
+
+        if not monarch_coordinator or not monarch_coordinator.data:
+            return await self._after_pl_mapping()
+
+        pl_account_set = set(
+            self._config_entry.data.get(CONF_PL_ACCOUNTS, [])
+        )
+        holdings = [
+            h
+            for h in monarch_coordinator.data.get("holdings", {}).values()
+            if h.account_id in pl_account_set
+        ]
+        if not holdings:
+            return await self._after_pl_mapping()
+
+        stock_symbols = set(
+            s.upper() for s in (stock_coordinator.stocks if stock_coordinator else [])
+        )
+        symbol_options = {"": "None (Monarch fallback)"}
+        for s in sorted(stock_symbols):
+            symbol_options[s] = f"{s} (live)"
+
+        existing_map = self._config_entry.data.get(CONF_PL_TICKER_MAP, {})
+
+        seen_tickers: set[str] = set()
+        schema_dict = {}
+        for h in sorted(holdings, key=lambda x: (x.account_name, x.ticker)):
+            ticker = (h.ticker or "N/A").upper()
+            if ticker in seen_tickers:
+                continue
+            seen_tickers.add(ticker)
+
+            if ticker in existing_map:
+                default = existing_map[ticker]
+            elif ticker in stock_symbols:
+                default = ticker
+            else:
+                default = ""
+
+            schema_dict[vol.Optional(ticker, default=default)] = vol.In(
+                symbol_options
+            )
+
+        if not schema_dict:
+            return await self._after_pl_mapping()
+
+        return self.async_show_form(
+            step_id="pl_mapping",
+            data_schema=vol.Schema(schema_dict),
         )
 
     async def async_step_advanced(self, user_input=None):

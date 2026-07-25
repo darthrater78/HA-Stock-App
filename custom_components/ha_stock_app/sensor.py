@@ -17,7 +17,13 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_MONARCH_ACCOUNTS, CONF_PL_ACCOUNTS, DOMAIN, device_info
+from .const import (
+    CONF_MONARCH_ACCOUNTS,
+    CONF_PL_ACCOUNTS,
+    CONF_PL_TICKER_MAP,
+    DOMAIN,
+    device_info,
+)
 from .coordinator import StockCoordinator, MonarchCoordinator
 from .market import NYSECalendar, market_now
 
@@ -55,8 +61,10 @@ async def async_setup_entry(
 
         pl_accounts = entry.data.get(CONF_PL_ACCOUNTS, [])
         if pl_accounts:
+            ticker_map = entry.data.get(CONF_PL_TICKER_MAP, {})
             entities.append(TodayPLSensor(
-                monarch_coordinator, stock_coordinator, pl_accounts, entry,
+                monarch_coordinator, stock_coordinator,
+                pl_accounts, ticker_map, entry,
             ))
 
     async_add_entities(entities, update_before_add=True)
@@ -302,11 +310,13 @@ class TodayPLSensor(CoordinatorEntity, SensorEntity):
         monarch_coordinator: MonarchCoordinator,
         stock_coordinator: StockCoordinator,
         pl_account_ids: list[str],
+        ticker_map: dict[str, str],
         entry: ConfigEntry,
     ) -> None:
         super().__init__(monarch_coordinator)
         self._stock_coordinator = stock_coordinator
         self._pl_account_ids = set(pl_account_ids)
+        self._ticker_map = ticker_map
         self._attr_unique_id = f"{DOMAIN}_today_pl"
         self._attr_name = "Today's P&L"
         self._attr_device_info = device_info(entry)
@@ -328,6 +338,23 @@ class TodayPLSensor(CoordinatorEntity, SensorEntity):
     def _handle_stock_update(self) -> None:
         self.async_write_ha_state()
 
+    def _resolve_quote(self, ticker: str, quotes: dict):
+        """Look up the live quote for a holding's ticker.
+
+        When an explicit ticker map is configured, it is authoritative:
+        a mapping to a symbol uses that quote, a mapping to "" means
+        Monarch-only, and a ticker absent from the map auto-matches
+        (handles holdings added after the last config visit).
+        """
+        if self._ticker_map:
+            mapped = self._ticker_map.get(ticker)
+            if mapped is None:
+                return quotes.get(ticker)
+            if mapped:
+                return quotes.get(mapped)
+            return None
+        return quotes.get(ticker)
+
     def _compute(self) -> tuple[float, list[dict]]:
         """Return (total_pl, per-holding detail list)."""
         if not self.coordinator.data:
@@ -343,11 +370,12 @@ class TodayPLSensor(CoordinatorEntity, SensorEntity):
 
             ticker = (h.ticker or "").upper()
             label = ticker if ticker and ticker != "N/A" else h.name[:20]
-            quote = quotes.get(ticker)
+            quote = self._resolve_quote(ticker, quotes)
+            mapped_to = self._ticker_map.get(ticker, ticker) if self._ticker_map else ticker
 
             if quote:
                 daily_change = h.quantity * quote.change
-                source = "live"
+                source = f"live:{quote.symbol}"
                 pct = round(quote.change_percent, 2)
             elif h.one_day_change_pct and (100 + h.one_day_change_pct) != 0:
                 daily_change = h.value * h.one_day_change_pct / (100 + h.one_day_change_pct)
@@ -367,6 +395,7 @@ class TodayPLSensor(CoordinatorEntity, SensorEntity):
                 "day_change": round(daily_change, 2),
                 "change_pct": pct,
                 "source": source,
+                "mapped_to": mapped_to,
             })
 
         return round(total, 2), details
