@@ -127,7 +127,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             from .coordinator import MonarchCoordinator
 
-            await hass.async_add_executor_job(lambda: __import__("gql"))
             monarch_coordinator = MonarchCoordinator(hass, config)
             await monarch_coordinator.async_config_entry_first_refresh()
             data["monarch_coordinator"] = monarch_coordinator
