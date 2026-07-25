@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from importlib.metadata import version as pkg_version
 
@@ -12,7 +12,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -55,7 +55,9 @@ async def async_setup_entry(
 
         pl_accounts = entry.data.get(CONF_PL_ACCOUNTS, [])
         if pl_accounts:
-            entities.append(TodayPLSensor(monarch_coordinator, pl_accounts, entry))
+            entities.append(TodayPLSensor(
+                monarch_coordinator, stock_coordinator, pl_accounts, entry,
+            ))
 
     async_add_entities(entities, update_before_add=True)
 
@@ -282,6 +284,14 @@ class MonarchNetWorthSensor(CoordinatorEntity, SensorEntity):
 
 
 class TodayPLSensor(CoordinatorEntity, SensorEntity):
+    """Daily P&L across selected Monarch accounts.
+
+    Uses live Finnhub prices when a holding's ticker matches a configured
+    stock symbol, and falls back to Monarch's one_day_change_pct otherwise.
+    The ``holdings`` attribute exposes every pairing so the user can verify
+    which source each holding is using.
+    """
+
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "USD"
@@ -289,52 +299,97 @@ class TodayPLSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(
         self,
-        coordinator: MonarchCoordinator,
+        monarch_coordinator: MonarchCoordinator,
+        stock_coordinator: StockCoordinator,
         pl_account_ids: list[str],
         entry: ConfigEntry,
     ) -> None:
-        super().__init__(coordinator)
+        super().__init__(monarch_coordinator)
+        self._stock_coordinator = stock_coordinator
         self._pl_account_ids = set(pl_account_ids)
         self._attr_unique_id = f"{DOMAIN}_today_pl"
         self._attr_name = "Today's P&L"
         self._attr_device_info = device_info(entry)
+        self._unsub_stock: Any = None
 
-    def _included_holdings(self) -> list[MonarchHolding]:
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._unsub_stock = self._stock_coordinator.async_add_listener(
+            self._handle_stock_update
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        await super().async_will_remove_from_hass()
+        if self._unsub_stock:
+            self._unsub_stock()
+            self._unsub_stock = None
+
+    @callback
+    def _handle_stock_update(self) -> None:
+        self.async_write_ha_state()
+
+    def _compute(self) -> tuple[float, list[dict]]:
+        """Return (total_pl, per-holding detail list)."""
         if not self.coordinator.data:
-            return []
-        return [
-            h
-            for h in self.coordinator.data.get("holdings", {}).values()
-            if h.account_id in self._pl_account_ids
-        ]
+            return 0.0, []
+
+        quotes = self._stock_coordinator.data or {}
+
+        total = 0.0
+        details: list[dict] = []
+        for h in self.coordinator.data.get("holdings", {}).values():
+            if h.account_id not in self._pl_account_ids:
+                continue
+
+            ticker = (h.ticker or "").upper()
+            label = ticker if ticker and ticker != "N/A" else h.name[:20]
+            quote = quotes.get(ticker)
+
+            if quote:
+                daily_change = h.quantity * quote.change
+                source = "live"
+                pct = round(quote.change_percent, 2)
+            elif h.one_day_change_pct and (100 + h.one_day_change_pct) != 0:
+                daily_change = h.value * h.one_day_change_pct / (100 + h.one_day_change_pct)
+                source = "monarch"
+                pct = round(h.one_day_change_pct, 2)
+            else:
+                daily_change = 0.0
+                source = "none"
+                pct = 0.0
+
+            total += daily_change
+            details.append({
+                "ticker": label,
+                "account": h.account_name,
+                "shares": round(h.quantity, 4),
+                "value": round(h.value, 2),
+                "day_change": round(daily_change, 2),
+                "change_pct": pct,
+                "source": source,
+            })
+
+        return round(total, 2), details
 
     @property
     def native_value(self) -> float | None:
-        holdings = self._included_holdings()
-        if not holdings:
+        if not self.coordinator.data:
             return None
-        total = 0.0
-        for h in holdings:
-            pct = h.one_day_change_pct
-            if pct and (100 + pct) != 0:
-                total += h.value * pct / (100 + pct)
-        return round(total, 2)
+        total, _ = self._compute()
+        return total
 
     @property
     def extra_state_attributes(self) -> dict:
-        holdings = self._included_holdings()
-        if not holdings:
+        if not self.coordinator.data:
             return {}
-        breakdown = {}
-        for h in holdings:
-            pct = h.one_day_change_pct
-            daily_change = 0.0
-            if pct and (100 + pct) != 0:
-                daily_change = h.value * pct / (100 + pct)
-            label = h.ticker if h.ticker != "N/A" else h.name[:20]
-            key = f"{label} ({h.account_name})"
-            breakdown[key] = round(daily_change, 2)
-        return {"breakdown": breakdown, "holding_count": len(holdings)}
+        total, details = self._compute()
+        live_count = sum(1 for d in details if d["source"] == "live")
+        return {
+            "holdings": details,
+            "holding_count": len(details),
+            "live_count": live_count,
+            "fallback_count": len(details) - live_count,
+        }
 
 
 class MonarchPackageVersionSensor(SensorEntity):
