@@ -54,10 +54,15 @@ Three layers, in the **Rate Limit + Test Tag** node:
   cooldown, so a stock hovering at +1.2% notifies once rather than every poll.
   Finnhub errors are deduped for two hours.
 
-Each **Format …** node also refuses to build a notification from a payload that
-lacks the event's fields, logging the raw payload as a warning instead. Without
-that, an unexpected payload still produced a notification — `undefined NaN%` and
-similar — which is how malformed events turned into a flood.
+Each **Format …** node filters on `event_type` itself before doing anything
+else. Some versions of `node-red-contrib-home-assistant-websocket` do not honour
+the `server-events` node's own event-type filter and deliver every event on the
+bus — including `state_changed`, which fires hundreds of times a minute. Checking
+in the function makes the flow correct regardless of which version is installed.
+
+A payload that passes the type check but lacks the event's fields is also
+refused, and logged as a warning. Without both guards an unexpected payload still
+produced a notification — `undefined NaN%` and similar.
 
 State lives in Node-RED flow context and resets on redeploy.
 
