@@ -62,11 +62,11 @@
           "enable_401k_reporting": "401k delayed NAV reporting",
           "enable_debug_logging": "Enable debug logging"
         },
-        "description": "Scheduled events (market open, end-of-day summary, API self-test) fire according to the market timezone below, independently of Home Assistant's own timezone. The holiday calendar is NYSE-specific and always applies."
+        "description": "Scheduled events (market open, end-of-day summary, API self-test) fire according to the market timezone below, independently of Home Assistant's own timezone. The holiday calendar is NYSE-specific and always applies.\n\n*Next: Select accounts and configure P&L →*"
       },
       "select_accounts": {
         "title": "Select Monarch Accounts",
-        "description": "**Accounts** — which Monarch accounts to create as sensors (all types).\n\n**P&L Accounts** — which investment accounts to include in the Today's P&L sensor. Only accounts with stock holdings are shown. Select brokerage and IRA; exclude 401k (uses delayed NAV). The next step lets you map each holding to a live stock feed.",
+        "description": "**Accounts** — which Monarch accounts to create as Home Assistant sensors.\n\n**P&L Accounts** — which investment accounts feed into the Today's P&L sensor. Only accounts with stock holdings are shown. Select brokerage and IRA; exclude 401k (uses delayed NAV).\n\n*Next: Map each holding to a live stock price →*",
         "data": {
           "monarch_accounts": "Accounts (all types)",
           "pl_accounts": "P&L Accounts (investment only)"
@@ -74,7 +74,7 @@
       },
       "pl_mapping": {
         "title": "P&L Ticker Mapping",
-        "description": "Map each holding to a live Finnhub symbol for real-time P&L. Select 'None' to use Monarch's daily change instead.\n\n**Your holdings:**\n{holdings_summary}"
+        "description": "Map each holding to a live Finnhub symbol for real-time P&L. Select 'None' to fall back to Monarch's daily change (updated once per day).\n\n**Your holdings:**\n{holdings_summary}"
       },
       "advanced": {
         "title": "Advanced Settings",

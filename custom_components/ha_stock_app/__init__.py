@@ -110,6 +110,10 @@ MONARCH_PACKAGE = "monarchmoneycommunity"
 
 
 async def _check_monarch_update(hass: HomeAssistant, entry_id: str) -> None:
+    check_key = f"{DOMAIN}_monarch_version_checked"
+    if hass.data.get(check_key):
+        return
+    hass.data[check_key] = True
     try:
         installed = pkg_version(MONARCH_PACKAGE)
     except Exception:
@@ -353,7 +357,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ir.async_delete_issue(hass, DOMAIN, f"monarch_auth_failed_{entry.entry_id}")
         ir.async_delete_issue(hass, DOMAIN, f"stock_api_failure_{entry.entry_id}")
         ir.async_delete_issue(hass, DOMAIN, f"finnhub_self_test_failed_{entry.entry_id}")
-        ir.async_delete_issue(hass, DOMAIN, f"monarch_update_available_{entry.entry_id}")
         if not hass.data[DOMAIN]:
             hass.services.async_remove(DOMAIN, "test_notification")
     return unload_ok
