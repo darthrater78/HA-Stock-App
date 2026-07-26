@@ -128,19 +128,33 @@ class Trigger401kCheckButton(ButtonEntity):
             _LOGGER.warning("401k sensor %s not found", sensor_id)
             return
         try:
-            value = float(state.state)
+            old_val = float(state.state)
         except (ValueError, TypeError):
-            value = state.state
+            old_val = 0.0
+
+        coordinator = data.get("monarch_coordinator")
+        if coordinator:
+            await coordinator.async_request_refresh()
+
+        state = self.hass.states.get(sensor_id)
+        try:
+            new_val = float(state.state) if state else old_val
+        except (ValueError, TypeError):
+            new_val = old_val
+
+        change = round(new_val - old_val, 2)
+        change_pct = round((change / old_val * 100), 2) if old_val else 0.0
+
         self.hass.bus.async_fire(EVENT_EOD2_SUMMARY, {
             "sensor": sensor_id,
-            "previous_value": value,
-            "new_value": value,
-            "day_change": 0,
-            "day_change_pct": 0,
+            "previous_value": old_val,
+            "new_value": new_val,
+            "day_change": change,
+            "day_change_pct": change_pct,
             "deferred": False,
             "manual": True,
         })
-        _LOGGER.info("401k manual update fired for %s (value: %s)", sensor_id, value)
-        scheduler = data.get("scheduler")
-        if scheduler:
-            await scheduler._eod2_start_watch()
+        _LOGGER.info(
+            "401k manual update: %s was $%.2f, now $%.2f (change: $%.2f / %.2f%%)",
+            sensor_id, old_val, new_val, change, change_pct,
+        )
