@@ -7,7 +7,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING, DOMAIN, device_info
+from .const import (
+    CONF_401K_SENSOR,
+    CONF_ENABLE_401K_REPORTING,
+    DEFAULT_ENABLE_401K_REPORTING,
+    DOMAIN,
+    EVENT_EOD2_SUMMARY,
+    device_info,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,6 +58,9 @@ class RefreshStocksButton(ButtonEntity):
         coordinator = data.get("stock_coordinator")
         if coordinator:
             await coordinator.async_force_refresh()
+        scheduler = data.get("scheduler")
+        if scheduler:
+            await scheduler._eod1_summary()
 
 
 class RefreshMonarchButton(ButtonEntity):
@@ -109,9 +119,28 @@ class Trigger401kCheckButton(ButtonEntity):
         if not data:
             _LOGGER.warning("Entry data not available during 401k trigger")
             return
-        scheduler = data.get("scheduler")
-        if not scheduler:
-            _LOGGER.warning("Scheduler not available for 401k trigger")
+        sensor_id = self._entry.options.get(CONF_401K_SENSOR, "")
+        if not sensor_id:
+            _LOGGER.warning("No 401k sensor entity configured")
             return
-        _LOGGER.info("401k NAV watch triggered manually")
-        await scheduler._eod2_start_watch()
+        state = self.hass.states.get(sensor_id)
+        if not state:
+            _LOGGER.warning("401k sensor %s not found", sensor_id)
+            return
+        try:
+            value = float(state.state)
+        except (ValueError, TypeError):
+            value = state.state
+        self.hass.bus.async_fire(EVENT_EOD2_SUMMARY, {
+            "sensor": sensor_id,
+            "previous_value": value,
+            "new_value": value,
+            "day_change": 0,
+            "day_change_pct": 0,
+            "deferred": False,
+            "manual": True,
+        })
+        _LOGGER.info("401k manual update fired for %s (value: %s)", sensor_id, value)
+        scheduler = data.get("scheduler")
+        if scheduler:
+            await scheduler._eod2_start_watch()
