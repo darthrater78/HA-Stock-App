@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import logging
 import subprocess
 import sys
@@ -8,6 +9,8 @@ from typing import Any
 from homeassistant import data_entry_flow
 from homeassistant.components.repairs import RepairsFlow
 from homeassistant.core import HomeAssistant
+
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,6 +43,8 @@ class MonarchUpdateFlow(RepairsFlow):
             )
             if not success:
                 return self.async_abort(reason="update_failed")
+            importlib.invalidate_caches()
+            self.hass.data.pop(f"{DOMAIN}_monarch_version_checked", None)
             await self.hass.services.async_call(
                 "persistent_notification",
                 "create",
