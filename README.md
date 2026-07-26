@@ -150,7 +150,7 @@ python3 -m unittest discover tests
 
 ## Version History
 
-### v2.5.5 — 2026-07-26
+### v2.5.6 — 2026-07-26
 - **Added Today's P&L sensor** — real-time daily P&L across selected Monarch investment accounts, using live Finnhub prices where available with Monarch daily change as fallback
 - **Added configurable P&L ticker mapping** — options flow step to map each Monarch holding to a Finnhub symbol, with auto-matching for identical tickers and explicit "None" for Monarch-only fallback
 - **Added 401k Update button** — manual trigger for the NAV watch, fires the eod2_summary event immediately after refreshing Monarch data and comparing the balance change
