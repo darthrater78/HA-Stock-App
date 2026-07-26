@@ -100,9 +100,16 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
     def market_tz(self):
         return self._tz
 
+    async def async_force_refresh(self) -> None:
+        self._force_update = True
+        try:
+            await self.async_request_refresh()
+        finally:
+            self._force_update = False
+
     async def _async_update_data(self) -> dict[str, StockQuote]:
         _LOGGER.info("Stock poll triggered (interval=%ds)", self._poll_seconds)
-        if self._market_hours_enabled:
+        if self._market_hours_enabled and not getattr(self, "_force_update", False):
             from .market import NYSECalendar
             if not NYSECalendar.is_market_open(market_now(self.hass, self._tz), self._tz):
                 _LOGGER.info("Market closed — returning cached data")

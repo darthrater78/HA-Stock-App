@@ -50,7 +50,7 @@ class RefreshStocksButton(ButtonEntity):
             return
         coordinator = data.get("stock_coordinator")
         if coordinator:
-            await coordinator.async_request_refresh()
+            await coordinator.async_force_refresh()
 
 
 class RefreshMonarchButton(ButtonEntity):
@@ -110,6 +110,8 @@ class Trigger401kCheckButton(ButtonEntity):
             _LOGGER.warning("Entry data not available during 401k trigger")
             return
         scheduler = data.get("scheduler")
-        if scheduler:
-            await scheduler._eod2_start_watch()
-            _LOGGER.info("401k NAV watch triggered manually")
+        if not scheduler:
+            _LOGGER.warning("Scheduler not available for 401k trigger")
+            return
+        _LOGGER.info("401k NAV watch triggered manually")
+        await scheduler._eod2_start_watch()
