@@ -71,10 +71,12 @@ def async_describe_events(
 
     @callback
     def describe_monarch_status(event: Event) -> dict[str, str]:
-        return {
-            LOGBOOK_ENTRY_NAME: NAME,
-            LOGBOOK_ENTRY_MESSAGE: f"Monarch Money went {event.data.get('status', 'unknown')}",
-        }
+        status = event.data.get("status", "unknown")
+        if status == "scheduled_refresh":
+            msg = "triggered scheduled Monarch double-refresh"
+        else:
+            msg = f"Monarch Money went {status}"
+        return {LOGBOOK_ENTRY_NAME: NAME, LOGBOOK_ENTRY_MESSAGE: msg}
 
     @callback
     def describe_market_open(event: Event) -> dict[str, str]:

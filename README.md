@@ -9,18 +9,103 @@ A Home Assistant custom integration (HACS) for tracking stock prices and, option
 - **Timezone-correct scheduling** — a configurable market timezone (Eastern by default) drives every scheduled event, so they fire at the right moment whatever Home Assistant's own timezone is, and stay correct across DST
 - **Price alerts** — event fired when a symbol moves past a configurable threshold
 - **End-of-day summary** — fired at market close, including per-position P/L when Monarch is connected
-- **Monarch Money (optional)** — account balances, individual stock holdings within investment/brokerage/IRA accounts, paycheck detection, and a double-refresh workaround for a known Monarch API race condition. Selectable accounts let you import only what you need. Uses the unofficial [monarchmoney](https://github.com/hammem/monarchmoney) package; not affiliated with or endorsed by Monarch Money
-- **401k delayed NAV reporting** — defers notifications during configurable quiet hours and releases them the next morning
+- **Today's P&L sensor** — real-time daily P&L across selected Monarch investment accounts, using live Finnhub prices where available and falling back to Monarch's daily change. Configurable ticker mapping lets you pair each holding to a live symbol
+- **Monarch Money (optional)** — account balances, individual stock holdings within investment/brokerage/IRA accounts, paycheck detection, and a double-refresh workaround for a known Monarch API race condition. Selectable accounts let you import only what you need. Uses the community-maintained [monarchmoneycommunity](https://github.com/bradleyseanf/monarchmoneycommunity) package; not affiliated with or endorsed by Monarch Money
+- **401k delayed NAV reporting** — watches a Monarch holding sensor for value changes after market close, defers notifications during configurable quiet hours and releases them the next morning. Manual trigger button available for on-demand checks
 - **Finnhub self-test** — validates API connectivity once per trading day
-- **Manual refresh buttons** — button entities to trigger stock and Monarch data refreshes on demand
+- **Manual refresh buttons** — button entities to trigger stock and Monarch data refreshes on demand, plus a 401k Update button for manual NAV watch
 - **Test notifications** — select a notification type from a dropdown and fire a test event, all from within the integration (no Developer Tools needed)
+- **Repair issues** — surfaces connection failures, API problems, and package updates as HA repair issues with one-click fixes where possible
 - **Debug logging** — toggle verbose logging on/off from the options flow
-- **Diagnostics** — Market Status and Last Stock Poll sensors show at a glance whether the market is open and when prices last updated
-- **Logbook integration** — polls, price alerts, summaries and paycheck detection appear in the device's Activity tab
+- **Diagnostics** — Market Status, Last Stock Poll, and Monarch Package Version sensors show at a glance whether the market is open, when prices last updated, and what Monarch library version is installed
+- **Logbook integration** — all scheduled actions and events (polls, price alerts, summaries, paycheck detection, Monarch refreshes) appear in the device's Activity tab
 - **Device grouping** — all entities are grouped under a single HA Stock App device with proper `SensorDeviceClass.MONETARY` for currency display
 - Every feature above is independently toggleable through the config/options flow
 
 All events are fired on the HA event bus (`ha_stock_app_*`). The integration tracks prices and balances — **to get mobile notifications, import the included Node-RED flow** (see below).
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Home Assistant                               │
+│                                                                     │
+│  ┌──────────────┐    ┌──────────────────┐    ┌───────────────────┐  │
+│  │  Finnhub API  │    │  Monarch Money   │    │  NYSE Calendar    │  │
+│  │  (providers)  │    │  (monarch)       │    │  (market)         │  │
+│  └──────┬───────┘    └────────┬─────────┘    └────────┬──────────┘  │
+│         │                     │                       │             │
+│         ▼                     ▼                       │             │
+│  ┌──────────────┐    ┌──────────────────┐             │             │
+│  │    Stock      │    │    Monarch       │             │             │
+│  │  Coordinator  │    │   Coordinator    │             │             │
+│  └──────┬───────┘    └────────┬─────────┘             │             │
+│         │                     │                       │             │
+│         ├─────────────────────┤                       │             │
+│         ▼                     ▼                       ▼             │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                     Sensor Platform                         │    │
+│  │  Stock prices · Monarch accounts · Holdings · Net worth     │    │
+│  │  Today's P&L · Market status · Last poll · Package version  │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                     │
+│  ┌──────────────────────┐    ┌──────────────────────────────────┐   │
+│  │  Button Platform      │    │  Select Platform                │   │
+│  │  Refresh stocks       │    │  Test notification type picker  │   │
+│  │  Refresh Monarch      │    └──────────────────────────────────┘   │
+│  │  401k Update          │                                          │
+│  │  Send test notif.     │                                          │
+│  └──────────────────────┘                                           │
+│                                                                     │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │                   Scheduled Features                         │   │
+│  │  9:15  Finnhub self-test          16:00  EOD summary         │   │
+│  │  9:25  Monarch double-refresh     16:00  Monarch refresh     │   │
+│  │  9:30  Market open notification   16:05  401k NAV watch      │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│         │                                                           │
+│         ▼                                                           │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │                     HA Event Bus                              │   │
+│  │  ha_stock_app_stock_update    ha_stock_app_eod_summary       │   │
+│  │  ha_stock_app_price_alert     ha_stock_app_eod2_summary      │   │
+│  │  ha_stock_app_market_open     ha_stock_app_paycheck_detected │   │
+│  │  ha_stock_app_finnhub_error   ha_stock_app_monarch_status    │   │
+│  │  ha_stock_app_finnhub_ok                                     │   │
+│  └──────────────┬───────────────────────────────────────────────┘   │
+│                 │                                                    │
+│                 ▼                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │  Logbook · Node-RED · Automations · Scripts                  │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Module breakdown
+
+| Module | Role |
+|---|---|
+| `__init__.py` | Entry setup, config migration, `ScheduledFeatures` class, service registration (`test_notification`), Monarch version check |
+| `config_flow.py` | Multi-step config and options flow: stock API setup → Monarch auth → account selection → P&L ticker mapping → advanced settings (paycheck/401k) |
+| `coordinator.py` | Two HA `DataUpdateCoordinator` subclasses — `StockCoordinator` polls Finnhub on a configurable interval with market-hours gating and price alerts; `MonarchCoordinator` polls Monarch with paycheck detection and a double-refresh mechanism |
+| `sensor.py` | All sensor entities plus stale-entity cleanup. `TodayPLSensor` bridges both coordinators, using live Finnhub prices where a ticker mapping exists and Monarch's daily change as fallback |
+| `button.py` | Manual refresh buttons (stocks, Monarch, 401k trigger, test notification). Stock and 401k buttons fire their corresponding events immediately |
+| `select.py` | Test notification type picker — sets which event the test button fires |
+| `market.py` | NYSE calendar (holidays, early closes, trading-day checks), timezone resolution, `next_market_time` schedule resolver, quiet-hours logic, pay-window parser. Zero HA dependencies at module scope — testable standalone |
+| `monarch.py` | Monarch Money API client: session persistence with `0o600` file permissions, exponential login backoff (rate-limit-aware), holdings retrieval with explicit error distinction from empty results |
+| `providers.py` | Stock provider abstraction (`StockProvider` ABC) with `FinnhubProvider` implementation. 15-second request timeout. Symbol validation via regex |
+| `logbook.py` | Logbook event descriptions for all nine event types |
+| `repairs.py` | Monarch package update repair flow — one-click pip upgrade from the HA repairs UI |
+
+### Key design decisions
+
+**Event-driven notifications.** The integration fires events on the HA bus and does not send notifications directly. This keeps the integration focused on data and scheduling, and lets the user choose their notification method (Node-RED, automations, scripts). The included Node-RED flow is optional.
+
+**Absolute-instant scheduling.** Scheduled features are registered as one-shot `async_track_point_in_time` calls that re-arm after firing, rather than `async_track_time_change` wall-clock matches. This is necessary because the market's timezone and Home Assistant's timezone may observe DST on different dates — a wall-clock match in one zone drifts by an hour in the other. Each firing resolves the next market wall time to an absolute UTC instant.
+
+**Graceful Monarch degradation.** A Monarch failure (network, auth, rate limit) never takes stock tracking down with it. `ConfigEntryNotReady` is caught and the coordinator is kept in a degraded state rather than propagated, which would put the entire config entry into setup-retry. Login failures back off exponentially (60s → 1h) with a higher floor (15m) when rate-limited.
+
+**Holdings completeness tracking.** A failed holdings fetch for one account is distinct from that account holding nothing. The coordinator records whether the holdings set is complete; the sensor platform only prunes stale holding entities when the set is authoritative, preventing a transient error from permanently deleting sensors and their long-term statistics.
 
 ## Notifications — Node-RED Flow
 
@@ -49,8 +134,9 @@ Configuration is entirely through the HA UI:
 1. **Settings → Devices & Services → Add Integration → HA Stock App**
 2. Enter your stock provider API key and ticker symbols
 3. Optionally enable Monarch Money and provide credentials (with TOTP secret if MFA is enabled)
-4. Select which Monarch accounts to import (all selected by default)
-5. Fine-tune feature toggles (market hours gating, market timezone, EOD summary, 401k reporting, paycheck detection, debug logging, etc.) via the integration's **Configure** options
+4. Select which Monarch accounts to import
+5. Choose P&L accounts and map holdings to live Finnhub symbols
+6. Fine-tune feature toggles (market hours gating, market timezone, EOD summary, 401k reporting, paycheck detection, debug logging, etc.) via the integration's **Configure** options
 
 ## Development
 
@@ -64,11 +150,36 @@ python3 -m unittest discover tests
 
 ## Version History
 
+### v2.5.6 — 2026-07-26
+- **Added Today's P&L sensor** — real-time daily P&L across selected Monarch investment accounts, using live Finnhub prices where available with Monarch daily change as fallback
+- **Added configurable P&L ticker mapping** — options flow step to map each Monarch holding to a Finnhub symbol, with auto-matching for identical tickers and explicit "None" for Monarch-only fallback
+- **Added 401k Update button** — manual trigger for the NAV watch, fires the eod2_summary event immediately after refreshing Monarch data and comparing the balance change
+- **Added portfolio dashboard example** — `examples/portfolio-dashboard.yaml` with stock prices, Monarch accounts, P&L, and 401k sections
+- P&L account selector now filters to investment accounts only, showing tickers in dropdown labels
+- P&L ticker mapping shows holding name and account context for disambiguation
+- Manual refresh buttons now fire regardless of market hours and trigger notification events immediately
+- 401k button refreshes Monarch data before comparing values, so the change reflects the actual current balance
+- Monarch version check skipped if repair issue already exists (prevents redundant PyPI calls)
+- Fixed Monarch update repair showing on every reload
+- Account list cached across options flow steps (eliminates redundant API calls when navigating back)
+- Synced translations/en.json with strings.json
+- Fixed P&L sensor state_class (TOTAL, not MEASUREMENT)
+- Dropped stock poll log messages from INFO to DEBUG (reduces log noise by ~78 entries per trading day)
+- Cached P&L computation per update cycle (was computing twice per state write)
+- Scheduled Monarch double-refresh now fires an event visible in the logbook
+- Improved exception logging in Monarch update check
+
 ### v2.4.0 — 2026-07-25
 - **Fixed `gql` version conflict that broke the HA core Monarch Money integration.** The v2.3.2 manifest pinned `gql<4`, but `monarchmoney` itself requires `gql>=4.0` and the HA core Monarch Money integration (`monarchmoneycommunity`) requires `gql==4.0`. Installing this HACS integration downgraded `gql` from 4.x to 3.x in HA's shared Python environment, breaking Monarch authentication for both integrations. The damage persisted after disabling or removing the HACS integration because HA does not uninstall pip packages — only a full restore reverted the `gql` version
 - Changed `gql<4` to `gql>=4.0` to match upstream requirements
 - Relaxed `monarchmoney==0.1.15` to `monarchmoney>=0.1.15` to avoid forcing a specific version
 - Removed the unnecessary `gql` import pre-check from setup (the manifest handles package installation)
+- Switched from the abandoned `monarchmoney` package to the actively maintained `monarchmoneycommunity`
+- Added PyPI version check for `monarchmoneycommunity` with a fixable repair issue for one-click upgrades
+- Added Monarch Package Version diagnostic sensor
+- Streamlined the setup flow by removing confirmation screens
+- Added paycheck account selector for single-account detection
+- Surfaced connection failures as HA repair issues (Monarch auth, stock API, Finnhub self-test)
 - Made the Node-RED notification flow more prominent in the README — it's the recommended way to get mobile notifications from the integration
 
 ### v2.3.3 — 2026-07-25

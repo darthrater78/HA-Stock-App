@@ -57,6 +57,7 @@ from .const import (
     EVENT_FINNHUB_ERROR,
     EVENT_FINNHUB_OK,
     EVENT_PRICE_ALERT,
+    EVENT_MONARCH_STATUS,
     EVENT_PAYCHECK_DETECTED,
 )
 from .coordinator import StockCoordinator
@@ -149,8 +150,8 @@ async def _check_monarch_update(hass: HomeAssistant, entry_id: str) -> None:
                 },
                 data={"installed": installed, "latest": latest},
             )
-    except Exception:
-        _LOGGER.debug("Failed to check for %s updates", MONARCH_PACKAGE)
+    except Exception as exc:
+        _LOGGER.debug("Failed to check for %s updates: %s", MONARCH_PACKAGE, exc)
 
 
 def _apply_debug_logging(entry: ConfigEntry) -> None:
@@ -533,6 +534,9 @@ class ScheduledFeatures:
         mc = self._monarch_coordinator
         if mc:
             await mc.async_trigger_double_refresh()
+            self.hass.bus.async_fire(
+                EVENT_MONARCH_STATUS, {"status": "scheduled_refresh"}
+            )
 
     async def _eod1_summary(self) -> None:
         quotes = self._stock_coordinator.data

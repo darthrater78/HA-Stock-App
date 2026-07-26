@@ -321,6 +321,7 @@ class TodayPLSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = "Today's P&L"
         self._attr_device_info = device_info(entry)
         self._unsub_stock: Any = None
+        self._cached_result: tuple[float, list[dict]] | None = None
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -335,7 +336,13 @@ class TodayPLSensor(CoordinatorEntity, SensorEntity):
             self._unsub_stock = None
 
     @callback
+    def _handle_coordinator_update(self) -> None:
+        self._cached_result = None
+        super()._handle_coordinator_update()
+
+    @callback
     def _handle_stock_update(self) -> None:
+        self._cached_result = None
         self.async_write_ha_state()
 
     def _resolve_quote(self, ticker: str, quotes: dict):
@@ -400,18 +407,23 @@ class TodayPLSensor(CoordinatorEntity, SensorEntity):
 
         return round(total, 2), details
 
+    def _get_computed(self) -> tuple[float, list[dict]]:
+        if self._cached_result is None:
+            self._cached_result = self._compute()
+        return self._cached_result
+
     @property
     def native_value(self) -> float | None:
         if not self.coordinator.data:
             return None
-        total, _ = self._compute()
+        total, _ = self._get_computed()
         return total
 
     @property
     def extra_state_attributes(self) -> dict:
         if not self.coordinator.data:
             return {}
-        total, details = self._compute()
+        total, details = self._get_computed()
         live_count = sum(1 for d in details if d["source"] == "live")
         return {
             "holdings": details,
