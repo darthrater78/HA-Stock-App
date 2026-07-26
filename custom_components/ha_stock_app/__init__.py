@@ -591,6 +591,10 @@ class ScheduledFeatures:
         from .market import in_quiet_hours, market_now, parse_time_of_day
 
         sensor_id = self._opt(CONF_401K_SENSOR, "")
+
+        if self._monarch_coordinator:
+            await self._monarch_coordinator.async_request_refresh()
+
         state = self.hass.states.get(sensor_id)
         if not state:
             return
