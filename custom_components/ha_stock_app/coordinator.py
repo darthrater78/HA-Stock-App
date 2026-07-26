@@ -108,11 +108,11 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
             self._force_update = False
 
     async def _async_update_data(self) -> dict[str, StockQuote]:
-        _LOGGER.info("Stock poll triggered (interval=%ds)", self._poll_seconds)
+        _LOGGER.debug("Stock poll triggered (interval=%ds)", self._poll_seconds)
         if self._market_hours_enabled and not getattr(self, "_force_update", False):
             from .market import NYSECalendar
             if not NYSECalendar.is_market_open(market_now(self.hass, self._tz), self._tz):
-                _LOGGER.info("Market closed — returning cached data")
+                _LOGGER.debug("Market closed — returning cached data")
                 if self.data:
                     return self.data
 
@@ -144,7 +144,7 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
             _LOGGER.warning("No quote returned for: %s", ", ".join(missing))
 
         prices = {s: round(q.current_price, 2) for s, q in quotes.items()}
-        _LOGGER.info("Stock poll complete: %s", {s: f"${p:.2f}" for s, p in prices.items()})
+        _LOGGER.debug("Stock poll complete: %s", {s: f"${p:.2f}" for s, p in prices.items()})
         self.hass.bus.async_fire(EVENT_STOCK_UPDATE, {"prices": prices})
 
         for symbol, quote in quotes.items():
