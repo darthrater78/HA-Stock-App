@@ -300,7 +300,7 @@ class TodayPLSensor(CoordinatorEntity, SensorEntity):
     which source each holding is using.
     """
 
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "USD"
     _attr_icon = "mdi:currency-usd"
