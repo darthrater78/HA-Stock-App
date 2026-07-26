@@ -114,11 +114,14 @@ async def _check_monarch_update(hass: HomeAssistant, entry_id: str) -> None:
     if hass.data.get(check_key):
         return
     hass.data[check_key] = True
+    issue_id = f"monarch_update_available_{entry_id}"
+    issue_registry = ir.async_get(hass)
+    if issue_registry.async_get_issue(DOMAIN, issue_id):
+        return
     try:
         installed = pkg_version(MONARCH_PACKAGE)
     except Exception:
         return
-    issue_id = f"monarch_update_available_{entry_id}"
     try:
         session = async_get_clientsession(hass)
         async with session.get(
@@ -130,7 +133,6 @@ async def _check_monarch_update(hass: HomeAssistant, entry_id: str) -> None:
             data = await resp.json()
         latest = data.get("info", {}).get("version", "")
         if not latest or latest == installed:
-            ir.async_delete_issue(hass, DOMAIN, issue_id)
             return
         from packaging.version import Version
         if Version(latest) > Version(installed):
@@ -147,8 +149,6 @@ async def _check_monarch_update(hass: HomeAssistant, entry_id: str) -> None:
                 },
                 data={"installed": installed, "latest": latest},
             )
-        else:
-            ir.async_delete_issue(hass, DOMAIN, issue_id)
     except Exception:
         _LOGGER.debug("Failed to check for %s updates", MONARCH_PACKAGE)
 
@@ -591,6 +591,10 @@ class ScheduledFeatures:
         from .market import in_quiet_hours, market_now, parse_time_of_day
 
         sensor_id = self._opt(CONF_401K_SENSOR, "")
+
+        if self._monarch_coordinator:
+            await self._monarch_coordinator.async_request_refresh()
+
         state = self.hass.states.get(sensor_id)
         if not state:
             return
