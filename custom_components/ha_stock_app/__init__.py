@@ -286,7 +286,7 @@ _TEST_EVENTS = {
         {
             "symbol": "VOO",
             "price": 530.00,
-            "previous": 523.45,
+            "previous_close": 523.45,
             "change_pct": 1.25,
             "direction": "up",
         },
