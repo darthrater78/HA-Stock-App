@@ -70,7 +70,6 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
             config[CONF_API_KEY],
             async_get_clientsession(hass),
         )
-        self._previous_prices: dict[str, float] = {}
         self._alert_threshold = config.get(CONF_ALERT_THRESHOLD, DEFAULT_ALERT_THRESHOLD)
         self._alert_cooldown_minutes = int(config.get(CONF_ALERT_COOLDOWN, DEFAULT_ALERT_COOLDOWN))
         self._last_alert_time: dict[str, float] = {}
@@ -159,22 +158,18 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
         cooldown_secs = self._alert_cooldown_minutes * 60
 
         for symbol, quote in quotes.items():
-            prev = self._previous_prices.get(symbol)
-            if prev is not None and prev > 0:
-                pct = abs((quote.current_price - prev) / prev) * 100
-                if pct >= self._alert_threshold:
-                    last_fired = self._last_alert_time.get(symbol, 0)
-                    if now_ts - last_fired >= cooldown_secs:
-                        alert_data = {
-                            "symbol": symbol,
-                            "price": quote.current_price,
-                            "previous": prev,
-                            "change_pct": round(quote.change_percent, 2),
-                            "direction": "up" if quote.current_price > prev else "down",
-                        }
-                        self.hass.bus.async_fire(EVENT_PRICE_ALERT, alert_data)
-                        self._last_alert_time[symbol] = now_ts
-            self._previous_prices[symbol] = quote.current_price
+            if abs(quote.change_percent) >= self._alert_threshold:
+                last_fired = self._last_alert_time.get(symbol, 0)
+                if now_ts - last_fired >= cooldown_secs:
+                    alert_data = {
+                        "symbol": symbol,
+                        "price": quote.current_price,
+                        "previous_close": quote.previous_close,
+                        "change_pct": round(quote.change_percent, 2),
+                        "direction": "up" if quote.change_percent >= 0 else "down",
+                    }
+                    self.hass.bus.async_fire(EVENT_PRICE_ALERT, alert_data)
+                    self._last_alert_time[symbol] = now_ts
 
         return quotes
 
