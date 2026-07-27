@@ -48,6 +48,7 @@ async def async_setup_entry(
     entities.append(MonarchPackageVersionSensor(entry))
     for symbol in stock_coordinator.stocks:
         entities.append(StockPriceSensor(stock_coordinator, symbol, entry))
+        entities.append(StockChangePercentSensor(stock_coordinator, symbol, entry))
 
     monarch_coordinator: MonarchCoordinator | None = data.get("monarch_coordinator")
     if monarch_coordinator and monarch_coordinator.data:
@@ -131,6 +132,25 @@ class StockPriceSensor(CoordinatorEntity, SensorEntity):
             "change": round(q.change, 2),
             "change_percent": round(q.change_percent, 2),
         }
+
+
+class StockChangePercentSensor(CoordinatorEntity, SensorEntity):
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "%"
+    _attr_icon = "mdi:percent"
+
+    def __init__(self, coordinator: StockCoordinator, symbol: str, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._symbol = symbol
+        self._attr_unique_id = f"{DOMAIN}_stock_{symbol.lower()}_change_pct"
+        self._attr_name = f"{symbol} Change %"
+        self._attr_device_info = device_info(entry)
+
+    @property
+    def native_value(self) -> float | None:
+        if self.coordinator.data and self._symbol in self.coordinator.data:
+            return round(self.coordinator.data[self._symbol].change_percent, 2)
+        return None
 
 
 class MonarchAccountSensor(CoordinatorEntity, SensorEntity):
