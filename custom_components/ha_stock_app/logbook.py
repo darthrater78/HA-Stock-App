@@ -72,7 +72,9 @@ def async_describe_events(
     @callback
     def describe_monarch_status(event: Event) -> dict[str, str]:
         status = event.data.get("status", "unknown")
-        if status == "scheduled_refresh":
+        if status == "manual_refresh":
+            msg = "manually refreshed Monarch accounts"
+        elif status == "scheduled_refresh":
             msg = "triggered scheduled Monarch double-refresh"
         else:
             msg = f"Monarch Money went {status}"

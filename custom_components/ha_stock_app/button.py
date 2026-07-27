@@ -13,6 +13,7 @@ from .const import (
     DEFAULT_ENABLE_401K_REPORTING,
     DOMAIN,
     EVENT_EOD2_SUMMARY,
+    EVENT_MONARCH_STATUS,
     device_info,
 )
 
@@ -80,6 +81,9 @@ class RefreshMonarchButton(ButtonEntity):
         coordinator = data.get("monarch_coordinator")
         if coordinator:
             await coordinator.async_request_refresh()
+            self.hass.bus.async_fire(
+                EVENT_MONARCH_STATUS, {"status": "manual_refresh"}
+            )
 
 
 class SendTestNotificationButton(ButtonEntity):
