@@ -14,10 +14,12 @@ CONF_MONARCH_PASSWORD = "monarch_password"
 CONF_MONARCH_ENABLED = "monarch_enabled"
 CONF_MONARCH_MFA_SECRET = "monarch_mfa_secret"
 CONF_ALERT_THRESHOLD = "alert_threshold"
+CONF_ALERT_COOLDOWN = "alert_cooldown"
 
 DEFAULT_PROVIDER = "finnhub"
 DEFAULT_POLL_FREQUENCY = 300  # 5 minutes
 DEFAULT_ALERT_THRESHOLD = 2.0  # percent
+DEFAULT_ALERT_COOLDOWN = 60  # minutes
 
 # Feature toggles
 CONF_ENABLE_MARKET_HOURS = "enable_market_hours"

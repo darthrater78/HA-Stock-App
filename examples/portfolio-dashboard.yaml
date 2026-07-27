@@ -14,6 +14,7 @@
 #
 # The pattern is:
 #   Stock prices:  sensor.ha_stock_app_{symbol}_stock_price
+#   Daily % chg:   sensor.ha_stock_app_{symbol}_change_pct
 #   Holdings:      sensor.ha_stock_app_monarch_{ticker}_{account_name}
 #   Accounts:      sensor.ha_stock_app_monarch_{institution}_{name}
 #   P&L:           sensor.ha_stock_app_today_s_p_l
@@ -207,15 +208,15 @@ sections:
       - type: heading
         heading: Today's Performance
       - type: history-graph
-        title: Stock Prices
+        title: Stock % Change
         entities:
-          - entity: sensor.ha_stock_app_aapl_stock_price
+          - entity: sensor.ha_stock_app_aapl_change_pct
             name: AAPL
         hours_to_show: 9
       - type: history-graph
-        title: ETF Prices
+        title: ETF % Change
         entities:
-          - entity: sensor.ha_stock_app_voo_stock_price
+          - entity: sensor.ha_stock_app_voo_change_pct
             name: VOO
         hours_to_show: 8
       - type: history-graph

@@ -9,7 +9,8 @@
           "api_key": "API Key",
           "stocks": "Stock Symbols (comma-separated)",
           "poll_frequency": "Poll Frequency",
-          "alert_threshold": "Alert Threshold (%)"
+          "alert_threshold": "Alert Threshold (%)",
+          "alert_cooldown": "Alert Cooldown"
         }
       },
       "monarch": {
@@ -48,6 +49,7 @@
           "poll_frequency": "Poll Frequency",
           "market_timezone": "Market Timezone",
           "alert_threshold": "Alert Threshold (%)",
+          "alert_cooldown": "Alert Cooldown",
           "enable_market_hours": "Only poll during NYSE market hours",
           "enable_eod_summary": "End-of-day summary notification",
           "enable_market_open_event": "Market open notification",
