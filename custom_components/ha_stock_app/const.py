@@ -2,7 +2,7 @@ import json as _json
 from pathlib import Path as _Path
 
 DOMAIN = "ha_stock_app"
-PLATFORMS = ["sensor", "button", "select"]
+PLATFORMS = ["sensor", "button", "select", "switch"]
 VERSION = _json.loads((_Path(__file__).parent / "manifest.json").read_text())["version"]
 
 CONF_STOCKS = "stocks"
