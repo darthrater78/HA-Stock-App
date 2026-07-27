@@ -75,6 +75,7 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
             CONF_ENABLE_MARKET_HOURS, DEFAULT_ENABLE_MARKET_HOURS
         )
         self._tz = market_tz(config.get(CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE))
+        self.last_api_poll: dt_util.dt.datetime | None = None
 
         _LOGGER.info(
             "StockCoordinator initialized: poll every %ds, market hours gate %s, stocks %s",
@@ -121,6 +122,7 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
         except Exception as exc:
             raise UpdateFailed("Stock data fetch failed") from exc
 
+        self.last_api_poll = dt_util.utcnow()
         issue_id = f"stock_api_failure_{self._entry_id}" if self._entry_id else ""
 
         if self.stocks and not quotes:

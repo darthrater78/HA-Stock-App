@@ -244,9 +244,7 @@ class LastPollSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
-        if self.coordinator.last_update_success_time:
-            return self.coordinator.last_update_success_time
-        return None
+        return self.coordinator.last_api_poll
 
 
 class MarketStatusSensor(CoordinatorEntity, SensorEntity):
