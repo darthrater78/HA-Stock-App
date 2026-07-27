@@ -22,6 +22,7 @@ from .const import (
     CONF_MONARCH_PASSWORD,
     CONF_MONARCH_MFA_SECRET,
     CONF_ALERT_THRESHOLD,
+    CONF_ALERT_COOLDOWN,
     CONF_MONARCH_ACCOUNTS,
     CONF_PL_ACCOUNTS,
     CONF_PL_TICKER_MAP,
@@ -45,6 +46,7 @@ from .const import (
     DEFAULT_PROVIDER,
     DEFAULT_POLL_FREQUENCY,
     DEFAULT_ALERT_THRESHOLD,
+    DEFAULT_ALERT_COOLDOWN,
     DEFAULT_ENABLE_MARKET_HOURS,
     DEFAULT_ENABLE_EOD_SUMMARY,
     DEFAULT_ENABLE_MARKET_OPEN_EVENT,
@@ -92,6 +94,14 @@ MONARCH_POLL_OPTIONS = {
     "60": "1 hour",
 }
 
+ALERT_COOLDOWN_OPTIONS = {
+    "15": "15 minutes",
+    "30": "30 minutes",
+    "60": "1 hour",
+    "120": "2 hours",
+    "240": "4 hours",
+}
+
 RETRY_OPTIONS = {
     "15": "15 minutes",
     "30": "30 minutes",
@@ -127,6 +137,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_STOCKS: stocks,
                         CONF_POLL_FREQUENCY: user_input.get(CONF_POLL_FREQUENCY, str(DEFAULT_POLL_FREQUENCY)),
                         CONF_ALERT_THRESHOLD: user_input.get(CONF_ALERT_THRESHOLD, DEFAULT_ALERT_THRESHOLD),
+                        CONF_ALERT_COOLDOWN: user_input.get(CONF_ALERT_COOLDOWN, str(DEFAULT_ALERT_COOLDOWN)),
                     }
                     return await self._test_stock_api()
 
@@ -140,6 +151,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_ALERT_THRESHOLD, default=DEFAULT_ALERT_THRESHOLD): vol.All(
                     vol.Coerce(float), vol.Range(min=0.1, max=100.0)
                 ),
+                vol.Optional(CONF_ALERT_COOLDOWN, default=str(DEFAULT_ALERT_COOLDOWN)): vol.In(ALERT_COOLDOWN_OPTIONS),
             }),
             errors=errors,
         )
@@ -170,6 +182,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Optional(CONF_ALERT_THRESHOLD, default=self._data[CONF_ALERT_THRESHOLD]): vol.All(
                         vol.Coerce(float), vol.Range(min=0.1, max=100.0)
                     ),
+                    vol.Optional(CONF_ALERT_COOLDOWN, default=self._data.get(CONF_ALERT_COOLDOWN, str(DEFAULT_ALERT_COOLDOWN))): vol.In(ALERT_COOLDOWN_OPTIONS),
                 }),
                 errors={CONF_API_KEY: "stock_api_failed"},
             )
@@ -309,6 +322,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                 new_data[CONF_STOCKS] = stocks
                 new_data[CONF_POLL_FREQUENCY] = user_input.get(CONF_POLL_FREQUENCY, str(DEFAULT_POLL_FREQUENCY))
                 new_data[CONF_ALERT_THRESHOLD] = user_input.get(CONF_ALERT_THRESHOLD, DEFAULT_ALERT_THRESHOLD)
+                new_data[CONF_ALERT_COOLDOWN] = user_input.get(CONF_ALERT_COOLDOWN, str(DEFAULT_ALERT_COOLDOWN))
 
                 monarch_enabled = user_input.get(CONF_MONARCH_ENABLED, False)
                 new_data[CONF_MONARCH_ENABLED] = monarch_enabled
@@ -376,6 +390,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             vol.Optional(CONF_ALERT_THRESHOLD, default=current.get(CONF_ALERT_THRESHOLD, DEFAULT_ALERT_THRESHOLD)): vol.All(
                 vol.Coerce(float), vol.Range(min=0.1, max=100.0)
             ),
+            vol.Optional(CONF_ALERT_COOLDOWN, default=str(current.get(CONF_ALERT_COOLDOWN, DEFAULT_ALERT_COOLDOWN))): vol.In(ALERT_COOLDOWN_OPTIONS),
             vol.Optional(CONF_MARKET_TIMEZONE, default=opts.get(CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE)): vol.In(MARKET_TIMEZONES),
             vol.Optional(CONF_ENABLE_MARKET_HOURS, default=opts.get(CONF_ENABLE_MARKET_HOURS, DEFAULT_ENABLE_MARKET_HOURS)): bool,
             vol.Optional(CONF_ENABLE_EOD_SUMMARY, default=opts.get(CONF_ENABLE_EOD_SUMMARY, DEFAULT_ENABLE_EOD_SUMMARY)): bool,
