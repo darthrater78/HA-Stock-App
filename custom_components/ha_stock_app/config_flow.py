@@ -33,7 +33,6 @@ from .const import (
     CONF_ENABLE_MONARCH_DOUBLE_REFRESH,
     CONF_ENABLE_401K_REPORTING,
     CONF_ENABLE_PAYCHECK_DETECTION,
-    CONF_ENABLE_DEBUG_LOGGING,
     CONF_MARKET_TIMEZONE,
     CONF_MONARCH_POLL_INTERVAL,
     CONF_PAYCHECK_ACCOUNT,
@@ -54,7 +53,6 @@ from .const import (
     DEFAULT_ENABLE_MONARCH_DOUBLE_REFRESH,
     DEFAULT_ENABLE_401K_REPORTING,
     DEFAULT_ENABLE_PAYCHECK_DETECTION,
-    DEFAULT_ENABLE_DEBUG_LOGGING,
     DEFAULT_MARKET_TIMEZONE,
     DEFAULT_MONARCH_POLL_INTERVAL,
     DEFAULT_PAYCHECK_THRESHOLD,
@@ -351,10 +349,6 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                     CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE
                 )
 
-                self._options[CONF_ENABLE_DEBUG_LOGGING] = user_input.get(
-                    CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING
-                )
-
                 if monarch_enabled:
                     self._options[CONF_MONARCH_POLL_INTERVAL] = user_input.get(
                         CONF_MONARCH_POLL_INTERVAL, str(DEFAULT_MONARCH_POLL_INTERVAL)
@@ -410,10 +404,6 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(CONF_ENABLE_PAYCHECK_DETECTION, default=opts.get(CONF_ENABLE_PAYCHECK_DETECTION, DEFAULT_ENABLE_PAYCHECK_DETECTION)): bool,
                 vol.Optional(CONF_ENABLE_401K_REPORTING, default=opts.get(CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING)): bool,
             })
-
-        schema = schema.extend({
-            vol.Optional(CONF_ENABLE_DEBUG_LOGGING, default=opts.get(CONF_ENABLE_DEBUG_LOGGING, DEFAULT_ENABLE_DEBUG_LOGGING)): bool,
-        })
 
         return self.async_show_form(
             step_id="init",
