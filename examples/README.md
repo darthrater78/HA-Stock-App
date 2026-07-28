@@ -37,6 +37,7 @@ delivers.
 | `monarch_status` | Monarch went down or recovered | `Flow Errors` |
 | `finnhub_error` | Self-test failure, deduped for 2h | `Flow Errors` |
 | `finnhub_ok` | Silent unless manually triggered | `Flow Errors` |
+| `credit_card_change` | Payment or charge with before/after balance | `Stocks` |
 
 `stock_update` fires on every poll and is intentionally not wired to a
 notification.
@@ -77,13 +78,13 @@ for (const type of add) {
 }
 ```
 
-So HA only ever sends these eight event types down the socket. `state_changed`
+So HA only ever sends these nine event types down the socket. `state_changed`
 — which fires hundreds of times a minute in a normal install — is never
 transmitted, never deserialised, and never wakes a node.
 
 **Never blank an Event Type field.** An empty one takes the library's `__ALL__`
 branch and subscribes to the entire bus; the package's own documentation warns
-this "may overload the WebSocket message queue". Eight filtered subscriptions
+this "may overload the WebSocket message queue". Nine filtered subscriptions
 cost far less than one unfiltered one, so node count is the wrong thing to
 optimise here.
 

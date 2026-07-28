@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "HA Stock App Notifications",
     "disabled": false,
-    "info": "Sends ha_stock_app_* events to notify.mobile_app_owner.\n\nEach listener subscribes to ONE event type. The Home Assistant\nwebsocket client passes that type to subscribe_events, so HA only\nsends those events -- state_changed never reaches Node-RED.\n\nNever blank an Event Type field: an empty one subscribes to the whole\nbus and floods the websocket queue.\n\nSet the action on the Mobile Notify node to your own device."
+    "info": "Sends ha_stock_app_* events to notify.mobile_app_owner.\n\nEach listener subscribes to ONE event type (9 total). The Home Assistant\nwebsocket client passes that type to subscribe_events, so HA only\nsends those events -- state_changed never reaches Node-RED.\n\nNever blank an Event Type field: an empty one subscribes to the whole\nbus and floods the websocket queue.\n\nSet the action on the Mobile Notify node to your own device."
   },
   {
     "id": "n_ev_price_alert",
@@ -384,6 +384,54 @@
     "libs": [],
     "x": 470,
     "y": 500,
+    "wires": [
+      [
+        "n_gate"
+      ]
+    ]
+  },
+  {
+    "id": "n_ev_credit_card_change",
+    "type": "server-events",
+    "z": "ha_stock_v3_tab",
+    "name": "Credit Card Change Event",
+    "server": "97b53801.46be48",
+    "version": 2,
+    "eventType": "ha_stock_app_credit_card_change",
+    "event_type": "ha_stock_app_credit_card_change",
+    "eventData": "",
+    "exposeAsEntityConfig": "",
+    "waitForRunning": true,
+    "outputProperties": [
+      {
+        "property": "payload",
+        "propertyType": "msg",
+        "value": "",
+        "valueType": "eventData"
+      }
+    ],
+    "x": 170,
+    "y": 560,
+    "wires": [
+      [
+        "n_fmt_credit_card_change"
+      ]
+    ]
+  },
+  {
+    "id": "n_fmt_credit_card_change",
+    "type": "function",
+    "z": "ha_stock_v3_tab",
+    "name": "Format Credit Card Change",
+    "func": "const raw = msg.payload || {};\nif (raw.event_type && raw.event_type !== 'ha_stock_app_credit_card_change') return null;\n\nconst d = raw.event || raw.data || raw;\nconst TEST = d.test === true;\n\nif (d.account === undefined || d.change === undefined) {\n    node.warn('credit_card_change: unexpected payload, not notifying -> ' + String(JSON.stringify(msg.payload ?? null)).slice(0, 300));\n    node.status({fill: 'red', shape: 'ring', text: 'bad payload'});\n    return null;\n}\n\nconst change = Number(d.change);\nconst isPayment = change > 0;\nconst fmt = (v) => '$' + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});\n\nconst title = isPayment\n    ? `\\u2705 ${d.account} Payment`\n    : `\\uD83D\\uDCB3 ${d.account}`;\n\nconst sign = isPayment ? '-' : '+';\nconst message = `${fmt(d.previous_balance)} \\u2192 ${fmt(d.new_balance)} (${sign}${fmt(change)})`;\n\nmsg.payload = {\n    title: title,\n    message: message,\n    color: isPayment ? '#2E7D32' : '#D32F2F',\n    channel: 'Stocks',\n    test: TEST,\n    dedupKey: `cc:${d.account_id}`,\n    cooldownMs: 30 * 60 * 1000\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 470,
+    "y": 560,
     "wires": [
       [
         "n_gate"
