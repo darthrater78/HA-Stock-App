@@ -133,6 +133,18 @@ Full details (event table, rate-limiting behavior, customization) are in [`examp
 
 Install via HACS as a custom repository, or copy `custom_components/ha_stock_app` into your Home Assistant `config/custom_components/` directory and restart.
 
+### Dependencies
+
+The integration itself has no manual dependencies — Home Assistant installs `monarchmoneycommunity` automatically from the manifest.
+
+The **dashboard example** and **notification flow** are optional and require:
+
+| Component | Source | Required for |
+|---|---|---|
+| [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) | HACS frontend | Dashboard example |
+| [Sankey Chart](https://github.com/MindFreeze/ha-sankey-chart) | HACS frontend | Allocation view (optional) |
+| [Node-RED add-on](https://github.com/hassio-addons/addon-node-red) | HA Add-on Store | Notification flow |
+
 ## Configuration
 
 Configuration is entirely through the HA UI:
