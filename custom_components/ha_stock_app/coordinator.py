@@ -45,6 +45,7 @@ from .const import (
     EVENT_STOCK_UPDATE,
     EVENT_PAYCHECK_DETECTED,
     EVENT_MONARCH_STATUS,
+    EVENT_CREDIT_CARD_CHANGE,
     first_entity_id,
 )
 from .providers import get_provider, StockQuote
@@ -206,6 +207,7 @@ class MonarchCoordinator(DataUpdateCoordinator):
         )
         self._was_available = True
         self._previous_cash: float | None = None
+        self._previous_cc: dict[str, float] = {}
         self._double_refresh_unsub = None
 
         poll_minutes = int(config.get(CONF_MONARCH_POLL_INTERVAL, DEFAULT_MONARCH_POLL_INTERVAL))
@@ -364,5 +366,22 @@ class MonarchCoordinator(DataUpdateCoordinator):
                     }
                     self.hass.bus.async_fire(EVENT_PAYCHECK_DETECTED, paycheck_data)
             self._previous_cash = total_cash
+
+        for acct in accounts:
+            if (acct.type_name or "").lower() != "credit":
+                continue
+            curr = round(acct.balance, 2)
+            prev = self._previous_cc.get(acct.id)
+            if prev is not None and curr != prev:
+                self.hass.bus.async_fire(EVENT_CREDIT_CARD_CHANGE, {
+                    "account": acct.name,
+                    "account_id": acct.id,
+                    "previous_balance": prev,
+                    "new_balance": curr,
+                    "change": round(curr - prev, 2),
+                    "device_id": self.device_id,
+                    "entity_id": self.entity_id,
+                })
+            self._previous_cc[acct.id] = curr
 
         return result

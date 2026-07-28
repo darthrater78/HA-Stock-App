@@ -19,6 +19,7 @@ TEST_NOTIFICATION_OPTIONS = {
     "eod2_summary": "401k Update",
     "finnhub_error": "Finnhub API Error",
     "finnhub_ok": "Finnhub API OK",
+    "credit_card_change": "Credit Card Change",
 }
 
 

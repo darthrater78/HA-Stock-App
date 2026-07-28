@@ -15,6 +15,7 @@ from .const import (
     EVENT_MARKET_OPEN,
     EVENT_FINNHUB_ERROR,
     EVENT_FINNHUB_OK,
+    EVENT_CREDIT_CARD_CHANGE,
 )
 
 NAME = "HA Stock App"
@@ -119,6 +120,20 @@ def async_describe_events(
             msg = f"Monarch sync: {status}"
         return {LOGBOOK_ENTRY_NAME: NAME, LOGBOOK_ENTRY_MESSAGE: msg}
 
+    @callback
+    def describe_credit_card_change(event: Event) -> dict[str, str]:
+        d = event.data
+        change = d.get("change", 0)
+        direction = "payment" if change > 0 else "charge"
+        return {
+            LOGBOOK_ENTRY_NAME: NAME,
+            LOGBOOK_ENTRY_MESSAGE: (
+                f"{d.get('account', 'credit card')} {direction}: "
+                f"${abs(d.get('previous_balance', 0)):,.2f} → ${abs(d.get('new_balance', 0)):,.2f} "
+                f"(${abs(change):,.2f})"
+            ),
+        }
+
     async_describe_event(DOMAIN, EVENT_MONARCH_SYNC, describe_monarch_sync)
     async_describe_event(DOMAIN, EVENT_STOCK_UPDATE, describe_stock_update)
     async_describe_event(DOMAIN, EVENT_PRICE_ALERT, describe_price_alert)
@@ -129,3 +144,4 @@ def async_describe_events(
     async_describe_event(DOMAIN, EVENT_MARKET_OPEN, describe_market_open)
     async_describe_event(DOMAIN, EVENT_FINNHUB_ERROR, describe_finnhub_error)
     async_describe_event(DOMAIN, EVENT_FINNHUB_OK, describe_finnhub_ok)
+    async_describe_event(DOMAIN, EVENT_CREDIT_CARD_CHANGE, describe_credit_card_change)

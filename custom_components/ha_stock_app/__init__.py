@@ -61,6 +61,7 @@ from .const import (
     EVENT_PRICE_ALERT,
     EVENT_MONARCH_STATUS,
     EVENT_PAYCHECK_DETECTED,
+    EVENT_CREDIT_CARD_CHANGE,
     first_entity_id,
 )
 from .coordinator import StockCoordinator
@@ -317,6 +318,16 @@ _TEST_EVENTS = {
     "finnhub_ok": (
         EVENT_FINNHUB_OK,
         {"symbol": "VOO", "price": 523.45},
+    ),
+    "credit_card_change": (
+        EVENT_CREDIT_CARD_CHANGE,
+        {
+            "account": "Chase Sapphire",
+            "account_id": "test_cc_001",
+            "previous_balance": -1567.89,
+            "new_balance": -1234.56,
+            "change": 333.33,
+        },
     ),
 }
 

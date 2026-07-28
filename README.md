@@ -20,7 +20,8 @@ A Home Assistant custom integration (HACS) for tracking stock prices and, option
 - **Daily change % sensors** — per-symbol percentage change sensors for history graph charting
 - **Debug logging** — toggle verbose logging on/off from a switch entity on the device page (session-only, no integration reload)
 - **Diagnostics** — Market Status, Last Stock Poll, and Monarch Package Version sensors show at a glance whether the market is open, when prices last updated, and what Monarch library version is installed
-- **Logbook integration** — all scheduled actions and events (polls, price alerts, summaries, paycheck detection, Monarch refreshes) appear in the device's Activity tab
+- **Credit card balance tracking** — fires an event whenever a credit card balance changes between Monarch polls (payment posted, new charge, etc.)
+- **Logbook integration** — all scheduled actions and events (polls, price alerts, summaries, paycheck detection, credit card changes, Monarch refreshes) appear in the device's Activity tab
 - **Device grouping** — all entities are grouped under a single HA Stock App device with proper `SensorDeviceClass.MONETARY` for currency display
 - Every feature above is independently toggleable through the config/options flow
 
@@ -75,6 +76,7 @@ All events are fired on the HA event bus (`ha_stock_app_*`). The integration tra
 │  │  ha_stock_app_market_open     ha_stock_app_paycheck_detected │   │
 │  │  ha_stock_app_finnhub_error   ha_stock_app_monarch_status    │   │
 │  │  ha_stock_app_finnhub_ok      ha_stock_app_monarch_sync     │   │
+│  │  ha_stock_app_credit_card_change                            │   │
 │  └──────────────┬───────────────────────────────────────────────┘   │
 │                 │                                                    │
 │                 ▼                                                    │
@@ -98,7 +100,7 @@ All events are fired on the HA event bus (`ha_stock_app_*`). The integration tra
 | `market.py` | NYSE calendar (holidays, early closes, trading-day checks), timezone resolution, `next_market_time` schedule resolver, quiet-hours logic, pay-window parser. Zero HA dependencies at module scope — testable standalone |
 | `monarch.py` | Monarch Money API client: session persistence with `0o600` file permissions, exponential login backoff (rate-limit-aware), holdings retrieval with explicit error distinction from empty results |
 | `providers.py` | Stock provider abstraction (`StockProvider` ABC) with `FinnhubProvider` implementation. 15-second request timeout. Symbol validation via regex |
-| `logbook.py` | Logbook event descriptions for all ten event types |
+| `logbook.py` | Logbook event descriptions for all eleven event types |
 | `repairs.py` | Monarch package update repair flow — one-click pip upgrade from the HA repairs UI |
 
 ### Key design decisions
@@ -153,6 +155,13 @@ python3 -m unittest discover tests
 ```
 
 ## Version History
+
+### v2.7.3 — 2026-07-28
+- **Added credit card balance change notifications** — fires `ha_stock_app_credit_card_change` whenever any credit card balance changes between Monarch polls (payments, charges, refunds). Includes account name, previous/new balance, and change amount. Logbook handler, test event, and notification type selector option included
+- Node-RED example flow updated with credit card change listener and formatter nodes
+
+### v2.7.2 — 2026-07-28
+- **Fixed events missing from full Activity page** — custom events now include `entity_id` alongside `device_id` so they appear in both the collapsed Activity card on the device page and the full Activity log page. The HA frontend's full Activity page resolves `device_id` to `entity_ids` and queries with `entities_stmt()` which only checks `entity_id` in event data
 
 ### v2.7.0 — 2026-07-28
 - **Added Monarch account sync button** — triggers a real bank sync via Monarch's `request_accounts_refresh_and_wait` API (not just a cached data refresh), with a 5-minute timeout. Fires `ha_stock_app_monarch_sync` events (started, completed, failed, cooldown) visible in the logbook

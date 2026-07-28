@@ -68,6 +68,7 @@ EVENT_FINNHUB_ERROR = f"{DOMAIN}_finnhub_error"
 EVENT_FINNHUB_OK = f"{DOMAIN}_finnhub_ok"
 EVENT_STOCK_UPDATE = f"{DOMAIN}_stock_update"
 EVENT_MONARCH_SYNC = f"{DOMAIN}_monarch_sync"
+EVENT_CREDIT_CARD_CHANGE = f"{DOMAIN}_credit_card_change"
 
 CONF_MARKET_TIMEZONE = "market_timezone"
 DEFAULT_MARKET_TIMEZONE = "America/New_York"
