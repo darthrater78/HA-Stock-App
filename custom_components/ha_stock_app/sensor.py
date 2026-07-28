@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any, TYPE_CHECKING
 
-from importlib.metadata import version as pkg_version
+from importlib.metadata import PackageNotFoundError, version as pkg_version
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -464,5 +464,5 @@ class MonarchPackageVersionSensor(SensorEntity):
     def native_value(self) -> str | None:
         try:
             return pkg_version("monarchmoneycommunity")
-        except Exception:
+        except PackageNotFoundError:
             return None

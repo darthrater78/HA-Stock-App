@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time as _time
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 SENSITIVE_KEYS = {CONF_API_KEY, CONF_MONARCH_PASSWORD, CONF_MONARCH_MFA_SECRET}
+_SKIP_HOLDING_TYPES = {"depository", "credit", "loan"}
 
 
 def _strip_sensitive(config: dict[str, Any]) -> dict[str, Any]:
@@ -81,6 +83,7 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
         )
         self._tz = market_tz(config.get(CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE))
         self.last_api_poll: dt_util.dt.datetime | None = None
+        self._force_update_count = 0
 
         _LOGGER.info(
             "StockCoordinator initialized: poll every %ds, market hours gate %s, stocks %s",
@@ -121,15 +124,15 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
         return first_entity_id(self.hass, self._entry_id)
 
     async def async_force_refresh(self) -> None:
-        self._force_update = True
+        self._force_update_count += 1
         try:
             await self.async_request_refresh()
         finally:
-            self._force_update = False
+            self._force_update_count -= 1
 
     async def _async_update_data(self) -> dict[str, StockQuote]:
         _LOGGER.debug("Stock poll triggered (interval=%ds)", self._poll_seconds)
-        if self._market_hours_enabled and not getattr(self, "_force_update", False):
+        if self._market_hours_enabled and self._force_update_count == 0:
             from .market import NYSECalendar
             if not NYSECalendar.is_market_open(market_now(self.hass, self._tz), self._tz):
                 _LOGGER.debug("Market closed — returning cached data")
@@ -167,8 +170,6 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
         prices = {s: round(q.current_price, 2) for s, q in quotes.items()}
         _LOGGER.debug("Stock poll complete: %s", {s: f"${p:.2f}" for s, p in prices.items()})
         self.hass.bus.async_fire(EVENT_STOCK_UPDATE, {"prices": prices, "device_id": self.device_id, "entity_id": self.entity_id})
-
-        import time as _time
 
         now_ts = _time.monotonic()
         cooldown_secs = self._alert_cooldown_minutes * 60
@@ -304,12 +305,11 @@ class MonarchCoordinator(DataUpdateCoordinator):
 
         from .monarch import MonarchHoldingsError
 
-        _SKIP_TYPES = {"depository", "credit", "loan"}
         all_holdings: dict[str, MonarchHolding] = {}
         holdings_complete = True
         for acct in accounts:
             type_lower = (acct.type_name or "").lower()
-            if type_lower in _SKIP_TYPES:
+            if type_lower in _SKIP_HOLDING_TYPES:
                 _LOGGER.debug(
                     "Skipping holdings for %s (%s) — type=%s",
                     acct.name, acct.id, acct.type_name,

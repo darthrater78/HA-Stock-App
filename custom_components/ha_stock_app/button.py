@@ -74,7 +74,7 @@ class RefreshStocksButton(ButtonEntity):
             await coordinator.async_force_refresh()
         scheduler = data.get("scheduler")
         if scheduler:
-            await scheduler._eod1_summary()
+            await scheduler.async_trigger_eod_summary()
 
 
 class RefreshMonarchButton(ButtonEntity):

@@ -23,3 +23,5 @@ test_notification:
               value: "finnhub_error"
             - label: "Finnhub API OK"
               value: "finnhub_ok"
+            - label: "Credit Card Change"
+              value: "credit_card_change"
