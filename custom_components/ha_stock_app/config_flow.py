@@ -65,7 +65,7 @@ from .const import (
     MARKET_TIMEZONES,
     PROVIDERS,
 )
-from .providers import get_provider, validate_symbols
+from .providers import get_provider, invalid_symbols
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -135,7 +135,7 @@ class HAStockAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not stocks:
                 errors[CONF_STOCKS] = "no_stocks"
             else:
-                invalid = validate_symbols(stocks)
+                invalid = invalid_symbols(stocks)
                 if invalid:
                     errors[CONF_STOCKS] = "invalid_symbols"
                 else:
@@ -320,7 +320,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
         errors = {}
         if user_input is not None:
             stocks = [s.strip().upper() for s in user_input.get(CONF_STOCKS, "").split(",") if s.strip()]
-            invalid = validate_symbols(stocks)
+            invalid = invalid_symbols(stocks)
             if invalid:
                 errors[CONF_STOCKS] = "invalid_symbols"
             elif not stocks:

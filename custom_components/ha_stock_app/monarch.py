@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import stat
@@ -274,8 +275,6 @@ class MonarchClient:
             return {}
 
     async def request_sync(self, timeout: int = 600) -> bool:
-        import asyncio
-
         if self._mm is None:
             _LOGGER.debug("Monarch sync: no active session, authenticating first")
             if not await self.authenticate():

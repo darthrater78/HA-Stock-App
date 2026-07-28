@@ -30,13 +30,14 @@ class StockQuote:
 
     def __post_init__(self) -> None:
         self.change = self.current_price - self.previous_close
-        if self.previous_close:
+        if self.previous_close != 0:
             self.change_percent = (self.change / self.previous_close) * 100
         else:
             self.change_percent = 0.0
 
 
-def validate_symbols(symbols: list[str]) -> list[str]:
+def invalid_symbols(symbols: list[str]) -> list[str]:
+    """Return symbols that do not match the allowed pattern."""
     return [s for s in symbols if not SYMBOL_PATTERN.match(s)]
 
 

@@ -500,6 +500,9 @@ class ScheduledFeatures:
             self._eod2_retry_unsub()
             self._eod2_retry_unsub = None
 
+    async def async_trigger_eod_summary(self) -> None:
+        await self._eod1_summary()
+
     async def _finnhub_self_test(self) -> None:
         provider = self._stock_coordinator.provider
         symbols = self._stock_coordinator.stocks
