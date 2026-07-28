@@ -221,6 +221,12 @@ class MonarchCoordinator(DataUpdateCoordinator):
             self._double_refresh_unsub()
             self._double_refresh_unsub = None
 
+    async def async_sync_accounts(self) -> bool:
+        success = await self._client.request_sync()
+        if success:
+            await self.async_request_refresh()
+        return success
+
     async def async_trigger_double_refresh(self) -> None:
         # Re-arming without cancelling would orphan the previous timer.
         self.async_cancel_pending()

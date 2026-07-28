@@ -35,6 +35,7 @@ from .const import (
     CONF_ENABLE_PAYCHECK_DETECTION,
     CONF_MARKET_TIMEZONE,
     CONF_MONARCH_POLL_INTERVAL,
+    CONF_MONARCH_SYNC_COOLDOWN,
     CONF_PAYCHECK_ACCOUNT,
     CONF_PAYCHECK_THRESHOLD,
     CONF_PAYCHECK_WINDOWS,
@@ -55,6 +56,7 @@ from .const import (
     DEFAULT_ENABLE_PAYCHECK_DETECTION,
     DEFAULT_MARKET_TIMEZONE,
     DEFAULT_MONARCH_POLL_INTERVAL,
+    DEFAULT_MONARCH_SYNC_COOLDOWN,
     DEFAULT_PAYCHECK_THRESHOLD,
     DEFAULT_PAYCHECK_WINDOWS,
     DEFAULT_401K_QUIET_START,
@@ -98,6 +100,14 @@ ALERT_COOLDOWN_OPTIONS = {
     "60": "1 hour",
     "120": "2 hours",
     "240": "4 hours",
+}
+
+MONARCH_SYNC_COOLDOWN_OPTIONS = {
+    "240": "4 hours",
+    "360": "6 hours",
+    "480": "8 hours",
+    "720": "12 hours",
+    "1440": "24 hours",
 }
 
 RETRY_OPTIONS = {
@@ -353,6 +363,9 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                     self._options[CONF_MONARCH_POLL_INTERVAL] = user_input.get(
                         CONF_MONARCH_POLL_INTERVAL, str(DEFAULT_MONARCH_POLL_INTERVAL)
                     )
+                    self._options[CONF_MONARCH_SYNC_COOLDOWN] = user_input.get(
+                        CONF_MONARCH_SYNC_COOLDOWN, str(DEFAULT_MONARCH_SYNC_COOLDOWN)
+                    )
                     self._options[CONF_ENABLE_MONARCH_DOUBLE_REFRESH] = user_input.get(
                         CONF_ENABLE_MONARCH_DOUBLE_REFRESH, DEFAULT_ENABLE_MONARCH_DOUBLE_REFRESH
                     )
@@ -398,8 +411,10 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
 
         if current.get(CONF_MONARCH_ENABLED, False):
             monarch_poll = str(opts.get(CONF_MONARCH_POLL_INTERVAL) or current.get(CONF_MONARCH_POLL_INTERVAL) or DEFAULT_MONARCH_POLL_INTERVAL)
+            sync_cooldown = str(opts.get(CONF_MONARCH_SYNC_COOLDOWN) or DEFAULT_MONARCH_SYNC_COOLDOWN)
             schema = schema.extend({
                 vol.Required(CONF_MONARCH_POLL_INTERVAL, default=monarch_poll): vol.In(MONARCH_POLL_OPTIONS),
+                vol.Required(CONF_MONARCH_SYNC_COOLDOWN, default=sync_cooldown): vol.In(MONARCH_SYNC_COOLDOWN_OPTIONS),
                 vol.Optional(CONF_ENABLE_MONARCH_DOUBLE_REFRESH, default=opts.get(CONF_ENABLE_MONARCH_DOUBLE_REFRESH, DEFAULT_ENABLE_MONARCH_DOUBLE_REFRESH)): bool,
                 vol.Optional(CONF_ENABLE_PAYCHECK_DETECTION, default=opts.get(CONF_ENABLE_PAYCHECK_DETECTION, DEFAULT_ENABLE_PAYCHECK_DETECTION)): bool,
                 vol.Optional(CONF_ENABLE_401K_REPORTING, default=opts.get(CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING)): bool,
