@@ -273,7 +273,7 @@ class MonarchClient:
             _LOGGER.debug("Monarch cashflow failure details", exc_info=True)
             return {}
 
-    async def request_sync(self, timeout: int = 300) -> bool:
+    async def request_sync(self, timeout: int = 600) -> bool:
         import asyncio
 
         if self._mm is None:
