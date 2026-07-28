@@ -273,6 +273,26 @@ class MonarchClient:
             _LOGGER.debug("Monarch cashflow failure details", exc_info=True)
             return {}
 
+    async def request_sync(self, timeout: int = 300) -> bool:
+        import asyncio
+
+        if self._mm is None:
+            if not await self.authenticate():
+                return False
+        try:
+            await asyncio.wait_for(
+                self._mm.request_accounts_refresh_and_wait(),
+                timeout=timeout,
+            )
+            return True
+        except asyncio.TimeoutError:
+            _LOGGER.warning("Monarch account sync timed out after %ds", timeout)
+            return False
+        except Exception as exc:
+            _LOGGER.error("Monarch account sync failed: %s", type(exc).__name__)
+            _LOGGER.debug("Monarch sync failure details", exc_info=True)
+            return False
+
     @property
     def is_authenticated(self) -> bool:
         return self._mm is not None

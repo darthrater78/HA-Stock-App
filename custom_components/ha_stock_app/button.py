@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -10,10 +11,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     CONF_401K_SENSOR,
     CONF_ENABLE_401K_REPORTING,
+    CONF_MONARCH_SYNC_COOLDOWN,
     DEFAULT_ENABLE_401K_REPORTING,
+    DEFAULT_MONARCH_SYNC_COOLDOWN,
     DOMAIN,
     EVENT_EOD2_SUMMARY,
     EVENT_MONARCH_STATUS,
+    EVENT_MONARCH_SYNC,
     device_info,
 )
 
@@ -30,6 +34,7 @@ async def async_setup_entry(
 
     if data.get("monarch_coordinator"):
         entities.append(RefreshMonarchButton(entry))
+        entities.append(SyncMonarchAccountsButton(entry))
 
     scheduler = data.get("scheduler")
     eod2_enabled = entry.options.get(
@@ -84,6 +89,65 @@ class RefreshMonarchButton(ButtonEntity):
             self.hass.bus.async_fire(
                 EVENT_MONARCH_STATUS, {"status": "manual_refresh"}
             )
+
+
+class SyncMonarchAccountsButton(ButtonEntity):
+    _attr_icon = "mdi:cloud-sync"
+
+    def __init__(self, entry: ConfigEntry) -> None:
+        self._entry = entry
+        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_sync_monarch"
+        self._attr_name = "Sync Monarch Accounts"
+        self._attr_device_info = device_info(entry)
+        self._last_sync: float = 0
+
+    @property
+    def _cooldown_seconds(self) -> int:
+        minutes = int(
+            self._entry.options.get(
+                CONF_MONARCH_SYNC_COOLDOWN, DEFAULT_MONARCH_SYNC_COOLDOWN
+            )
+        )
+        return minutes * 60
+
+    async def async_press(self) -> None:
+        now = time.monotonic()
+        if self._last_sync and (now - self._last_sync) < self._cooldown_seconds:
+            remaining = int((self._cooldown_seconds - (now - self._last_sync)) / 60)
+            self.hass.bus.async_fire(
+                EVENT_MONARCH_SYNC,
+                {"status": "cooldown", "remaining_minutes": remaining},
+            )
+            _LOGGER.info("Monarch sync cooldown: %d minutes remaining", remaining)
+            return
+
+        data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id)
+        if not data:
+            _LOGGER.warning("Entry data not available during Monarch sync")
+            return
+        coordinator = data.get("monarch_coordinator")
+        if not coordinator:
+            return
+
+        self.hass.bus.async_fire(EVENT_MONARCH_SYNC, {"status": "started"})
+        start = time.monotonic()
+
+        success = await coordinator.async_sync_accounts()
+
+        duration = int(time.monotonic() - start)
+        if success:
+            self._last_sync = time.monotonic()
+            self.hass.bus.async_fire(
+                EVENT_MONARCH_SYNC,
+                {"status": "completed", "duration_seconds": duration},
+            )
+            _LOGGER.info("Monarch account sync completed in %ds", duration)
+        else:
+            self.hass.bus.async_fire(
+                EVENT_MONARCH_SYNC,
+                {"status": "failed", "duration_seconds": duration},
+            )
+            _LOGGER.warning("Monarch account sync failed after %ds", duration)
 
 
 class SendTestNotificationButton(ButtonEntity):

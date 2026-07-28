@@ -11,6 +11,7 @@ from .const import (
     EVENT_EOD2_SUMMARY,
     EVENT_PAYCHECK_DETECTED,
     EVENT_MONARCH_STATUS,
+    EVENT_MONARCH_SYNC,
     EVENT_MARKET_OPEN,
     EVENT_FINNHUB_ERROR,
     EVENT_FINNHUB_OK,
@@ -102,6 +103,23 @@ def async_describe_events(
             LOGBOOK_ENTRY_MESSAGE: f"Finnhub self-test passed ({event.data.get('symbol')} ${event.data.get('price', 0):.2f})",
         }
 
+    @callback
+    def describe_monarch_sync(event: Event) -> dict[str, str]:
+        d = event.data
+        status = d.get("status", "unknown")
+        if status == "completed":
+            msg = f"Monarch account sync completed in {d.get('duration_seconds', 0)}s"
+        elif status == "started":
+            msg = "Monarch account sync started"
+        elif status == "failed":
+            msg = f"Monarch account sync failed after {d.get('duration_seconds', 0)}s"
+        elif status == "cooldown":
+            msg = f"Monarch sync on cooldown ({d.get('remaining_minutes', 0)} min remaining)"
+        else:
+            msg = f"Monarch sync: {status}"
+        return {LOGBOOK_ENTRY_NAME: NAME, LOGBOOK_ENTRY_MESSAGE: msg}
+
+    async_describe_event(DOMAIN, EVENT_MONARCH_SYNC, describe_monarch_sync)
     async_describe_event(DOMAIN, EVENT_STOCK_UPDATE, describe_stock_update)
     async_describe_event(DOMAIN, EVENT_PRICE_ALERT, describe_price_alert)
     async_describe_event(DOMAIN, EVENT_EOD_SUMMARY, describe_eod_summary)
