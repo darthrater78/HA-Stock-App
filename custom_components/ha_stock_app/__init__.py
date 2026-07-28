@@ -186,7 +186,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             from .coordinator import MonarchCoordinator
 
-            monarch_coordinator = MonarchCoordinator(hass, config)
+            monarch_coordinator = MonarchCoordinator(hass, config, entry_id=entry.entry_id)
             await monarch_coordinator.async_config_entry_first_refresh()
             data["monarch_coordinator"] = monarch_coordinator
             ir.async_delete_issue(hass, DOMAIN, monarch_issue_id)
@@ -391,6 +391,13 @@ class ScheduledFeatures:
         return self._config.get(key, default)
 
     @property
+    def _device_id(self) -> str | None:
+        from homeassistant.helpers import device_registry as dr
+        dev_reg = dr.async_get(self.hass)
+        device = dev_reg.async_get_device(identifiers={(DOMAIN, self._entry.entry_id)})
+        return device.id if device else None
+
+    @property
     def _stock_coordinator(self) -> StockCoordinator:
         return self._data["stock_coordinator"]
 
@@ -490,7 +497,7 @@ class ScheduledFeatures:
                 ir.async_delete_issue(self.hass, DOMAIN, issue_id)
                 self.hass.bus.async_fire(
                     EVENT_FINNHUB_OK,
-                    {"symbol": symbol, "price": quote.current_price},
+                    {"symbol": symbol, "price": quote.current_price, "device_id": self._device_id},
                 )
             else:
                 ir.async_create_issue(
@@ -503,7 +510,7 @@ class ScheduledFeatures:
                 )
                 self.hass.bus.async_fire(
                     EVENT_FINNHUB_ERROR,
-                    {"error": "No quote returned", "symbol": symbol},
+                    {"error": "No quote returned", "symbol": symbol, "device_id": self._device_id},
                 )
         except Exception as exc:
             _LOGGER.warning("Finnhub self-test failed for %s: %s", symbol, exc)
@@ -517,7 +524,7 @@ class ScheduledFeatures:
             )
             self.hass.bus.async_fire(
                 EVENT_FINNHUB_ERROR,
-                {"error": type(exc).__name__, "symbol": symbol},
+                {"error": type(exc).__name__, "symbol": symbol, "device_id": self._device_id},
             )
 
     async def _market_open_notify(self) -> None:
@@ -530,6 +537,7 @@ class ScheduledFeatures:
                 "date": d.isoformat(),
                 "early_close": close.hour == 13,
                 "close_time": close.strftime("%H:%M"),
+                "device_id": self._device_id,
             },
         )
 
@@ -538,7 +546,7 @@ class ScheduledFeatures:
         if mc:
             await mc.async_trigger_double_refresh()
             self.hass.bus.async_fire(
-                EVENT_MONARCH_STATUS, {"status": "scheduled_refresh"}
+                EVENT_MONARCH_STATUS, {"status": "scheduled_refresh", "device_id": self._device_id}
             )
 
     async def _eod1_summary(self) -> None:
@@ -574,7 +582,7 @@ class ScheduledFeatures:
 
             stocks[symbol] = entry
 
-        self.hass.bus.async_fire(EVENT_EOD_SUMMARY, {"stocks": stocks})
+        self.hass.bus.async_fire(EVENT_EOD_SUMMARY, {"stocks": stocks, "device_id": self._device_id})
 
     async def _eod2_start_watch(self) -> None:
         sensor_id = self._opt(CONF_401K_SENSOR, "")
@@ -641,6 +649,7 @@ class ScheduledFeatures:
                 "day_change": round(change, 2) if isinstance(change, float) else change,
                 "day_change_pct": round(change_pct, 2) if isinstance(change_pct, float) else change_pct,
                 "deferred": in_quiet,
+                "device_id": self._device_id,
             }
 
             if in_quiet:
