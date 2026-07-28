@@ -98,7 +98,7 @@ class RefreshMonarchButton(ButtonEntity):
             _LOGGER.debug("Manual Monarch refresh completed")
             self.hass.bus.async_fire(
                 EVENT_MONARCH_STATUS,
-                {"status": "manual_refresh", "device_id": _device_id(self.hass, self._entry)},
+                {"status": "manual_refresh", "device_id": _device_id(self.hass, self._entry), "entity_id": self.entity_id},
             )
 
 
@@ -134,7 +134,7 @@ class SyncMonarchAccountsButton(ButtonEntity):
             remaining = int((self._cooldown_seconds - (now - self._last_sync)) / 60)
             self.hass.bus.async_fire(
                 EVENT_MONARCH_SYNC,
-                {"status": "cooldown", "remaining_minutes": remaining, "device_id": dev_id},
+                {"status": "cooldown", "remaining_minutes": remaining, "device_id": dev_id, "entity_id": self.entity_id},
             )
             _LOGGER.info("Monarch sync cooldown: %d minutes remaining", remaining)
             return
@@ -148,7 +148,7 @@ class SyncMonarchAccountsButton(ButtonEntity):
             _LOGGER.warning("Monarch coordinator not available for sync")
             return
 
-        self.hass.bus.async_fire(EVENT_MONARCH_SYNC, {"status": "started", "device_id": dev_id})
+        self.hass.bus.async_fire(EVENT_MONARCH_SYNC, {"status": "started", "device_id": dev_id, "entity_id": self.entity_id})
         _LOGGER.info("Monarch account sync started")
         start = time.monotonic()
 
@@ -159,13 +159,13 @@ class SyncMonarchAccountsButton(ButtonEntity):
             self._last_sync = time.monotonic()
             self.hass.bus.async_fire(
                 EVENT_MONARCH_SYNC,
-                {"status": "completed", "duration_seconds": duration, "device_id": dev_id},
+                {"status": "completed", "duration_seconds": duration, "device_id": dev_id, "entity_id": self.entity_id},
             )
             _LOGGER.info("Monarch account sync completed in %ds", duration)
         else:
             self.hass.bus.async_fire(
                 EVENT_MONARCH_SYNC,
-                {"status": "failed", "duration_seconds": duration, "device_id": dev_id},
+                {"status": "failed", "duration_seconds": duration, "device_id": dev_id, "entity_id": self.entity_id},
             )
             _LOGGER.warning("Monarch account sync failed after %ds", duration)
 
@@ -189,7 +189,7 @@ class SendTestNotificationButton(ButtonEntity):
         test_type = data.get("test_notification_type", "eod_summary")
         if test_type in _TEST_EVENTS:
             event_name, event_data = _TEST_EVENTS[test_type]
-            self.hass.bus.async_fire(event_name, {**event_data, "test": True, "device_id": _device_id(self.hass, self._entry)})
+            self.hass.bus.async_fire(event_name, {**event_data, "test": True, "device_id": _device_id(self.hass, self._entry), "entity_id": self.entity_id})
             _LOGGER.info("Fired test event: %s", event_name)
 
 
@@ -242,6 +242,7 @@ class Trigger401kCheckButton(ButtonEntity):
             "deferred": False,
             "manual": True,
             "device_id": _device_id(self.hass, self._entry),
+            "entity_id": self.entity_id,
         })
         _LOGGER.info(
             "401k manual update: %s was $%.2f, now $%.2f (change: $%.2f / %.2f%%)",

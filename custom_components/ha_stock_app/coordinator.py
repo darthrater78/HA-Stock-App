@@ -45,6 +45,7 @@ from .const import (
     EVENT_STOCK_UPDATE,
     EVENT_PAYCHECK_DETECTED,
     EVENT_MONARCH_STATUS,
+    first_entity_id,
 )
 from .providers import get_provider, StockQuote
 from .market import market_now, market_tz, in_pay_window, parse_pay_windows
@@ -112,6 +113,12 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
         device = dev_reg.async_get_device(identifiers={(DOMAIN, self._entry_id)})
         return device.id if device else None
 
+    @property
+    def entity_id(self) -> str | None:
+        if not self._entry_id:
+            return None
+        return first_entity_id(self.hass, self._entry_id)
+
     async def async_force_refresh(self) -> None:
         self._force_update = True
         try:
@@ -158,7 +165,7 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
 
         prices = {s: round(q.current_price, 2) for s, q in quotes.items()}
         _LOGGER.debug("Stock poll complete: %s", {s: f"${p:.2f}" for s, p in prices.items()})
-        self.hass.bus.async_fire(EVENT_STOCK_UPDATE, {"prices": prices, "device_id": self.device_id})
+        self.hass.bus.async_fire(EVENT_STOCK_UPDATE, {"prices": prices, "device_id": self.device_id, "entity_id": self.entity_id})
 
         import time as _time
 
@@ -176,6 +183,7 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
                         "change_pct": round(quote.change_percent, 2),
                         "direction": "up" if quote.change_percent >= 0 else "down",
                         "device_id": self.device_id,
+                        "entity_id": self.entity_id,
                     }
                     self.hass.bus.async_fire(EVENT_PRICE_ALERT, alert_data)
                     self._last_alert_time[symbol] = now_ts
@@ -232,6 +240,12 @@ class MonarchCoordinator(DataUpdateCoordinator):
         device = dev_reg.async_get_device(identifiers={(DOMAIN, self._entry_id)})
         return device.id if device else None
 
+    @property
+    def entity_id(self) -> str | None:
+        if not self._entry_id:
+            return None
+        return first_entity_id(self.hass, self._entry_id)
+
     @callback
     def async_cancel_pending(self) -> None:
         """Cancel a deferred second refresh, if one is armed."""
@@ -269,7 +283,7 @@ class MonarchCoordinator(DataUpdateCoordinator):
 
         is_available = len(accounts) > 0
         if is_available != self._was_available:
-            status_data = {"status": "online" if is_available else "offline", "device_id": self.device_id}
+            status_data = {"status": "online" if is_available else "offline", "device_id": self.device_id, "entity_id": self.entity_id}
             self.hass.bus.async_fire(EVENT_MONARCH_STATUS, status_data)
             self._was_available = is_available
 
@@ -346,6 +360,7 @@ class MonarchCoordinator(DataUpdateCoordinator):
                         "new_balance": round(total_cash, 2),
                         "in_pay_window": in_pay_window(day, self._pay_windows),
                         "device_id": self.device_id,
+                        "entity_id": self.entity_id,
                     }
                     self.hass.bus.async_fire(EVENT_PAYCHECK_DETECTED, paycheck_data)
             self._previous_cash = total_cash
