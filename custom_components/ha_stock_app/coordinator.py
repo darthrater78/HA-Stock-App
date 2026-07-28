@@ -240,9 +240,14 @@ class MonarchCoordinator(DataUpdateCoordinator):
             self._double_refresh_unsub = None
 
     async def async_sync_accounts(self) -> bool:
+        _LOGGER.debug("Monarch coordinator: starting account sync")
         success = await self._client.request_sync()
         if success:
+            _LOGGER.debug("Monarch coordinator: sync succeeded, refreshing coordinator data")
             await self.async_request_refresh()
+            _LOGGER.debug("Monarch coordinator: post-sync data refresh complete")
+        else:
+            _LOGGER.debug("Monarch coordinator: sync returned failure")
         return success
 
     async def async_trigger_double_refresh(self) -> None:

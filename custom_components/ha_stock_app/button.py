@@ -123,6 +123,12 @@ class SyncMonarchAccountsButton(ButtonEntity):
 
     async def async_press(self) -> None:
         dev_id = _device_id(self.hass, self._entry)
+        cooldown_minutes = self._cooldown_seconds // 60
+        _LOGGER.debug(
+            "Sync button pressed (cooldown=%dm, last_sync=%s)",
+            cooldown_minutes,
+            f"{int(time.monotonic() - self._last_sync)}s ago" if self._last_sync else "never",
+        )
         now = time.monotonic()
         if self._last_sync and (now - self._last_sync) < self._cooldown_seconds:
             remaining = int((self._cooldown_seconds - (now - self._last_sync)) / 60)
@@ -139,9 +145,11 @@ class SyncMonarchAccountsButton(ButtonEntity):
             return
         coordinator = data.get("monarch_coordinator")
         if not coordinator:
+            _LOGGER.warning("Monarch coordinator not available for sync")
             return
 
         self.hass.bus.async_fire(EVENT_MONARCH_SYNC, {"status": "started", "device_id": dev_id})
+        _LOGGER.info("Monarch account sync started")
         start = time.monotonic()
 
         success = await coordinator.async_sync_accounts()
