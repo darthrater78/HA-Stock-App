@@ -105,3 +105,11 @@ def device_info(entry) -> dict:
         model="Stock & Finance Tracker",
         sw_version=VERSION,
     )
+
+
+def first_entity_id(hass, entry_id: str) -> str | None:
+    from homeassistant.helpers import entity_registry as er
+
+    ent_reg = er.async_get(hass)
+    entries = er.async_entries_for_config_entry(ent_reg, entry_id)
+    return entries[0].entity_id if entries else None

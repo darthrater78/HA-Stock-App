@@ -61,6 +61,7 @@ from .const import (
     EVENT_PRICE_ALERT,
     EVENT_MONARCH_STATUS,
     EVENT_PAYCHECK_DETECTED,
+    first_entity_id,
 )
 from .coordinator import StockCoordinator
 
@@ -398,6 +399,10 @@ class ScheduledFeatures:
         return device.id if device else None
 
     @property
+    def _entity_id(self) -> str | None:
+        return first_entity_id(self.hass, self._entry.entry_id)
+
+    @property
     def _stock_coordinator(self) -> StockCoordinator:
         return self._data["stock_coordinator"]
 
@@ -497,7 +502,7 @@ class ScheduledFeatures:
                 ir.async_delete_issue(self.hass, DOMAIN, issue_id)
                 self.hass.bus.async_fire(
                     EVENT_FINNHUB_OK,
-                    {"symbol": symbol, "price": quote.current_price, "device_id": self._device_id},
+                    {"symbol": symbol, "price": quote.current_price, "device_id": self._device_id, "entity_id": self._entity_id},
                 )
             else:
                 ir.async_create_issue(
@@ -510,7 +515,7 @@ class ScheduledFeatures:
                 )
                 self.hass.bus.async_fire(
                     EVENT_FINNHUB_ERROR,
-                    {"error": "No quote returned", "symbol": symbol, "device_id": self._device_id},
+                    {"error": "No quote returned", "symbol": symbol, "device_id": self._device_id, "entity_id": self._entity_id},
                 )
         except Exception as exc:
             _LOGGER.warning("Finnhub self-test failed for %s: %s", symbol, exc)
@@ -524,7 +529,7 @@ class ScheduledFeatures:
             )
             self.hass.bus.async_fire(
                 EVENT_FINNHUB_ERROR,
-                {"error": type(exc).__name__, "symbol": symbol, "device_id": self._device_id},
+                {"error": type(exc).__name__, "symbol": symbol, "device_id": self._device_id, "entity_id": self._entity_id},
             )
 
     async def _market_open_notify(self) -> None:
@@ -538,6 +543,7 @@ class ScheduledFeatures:
                 "early_close": close.hour == 13,
                 "close_time": close.strftime("%H:%M"),
                 "device_id": self._device_id,
+                "entity_id": self._entity_id,
             },
         )
 
@@ -546,7 +552,7 @@ class ScheduledFeatures:
         if mc:
             await mc.async_trigger_double_refresh()
             self.hass.bus.async_fire(
-                EVENT_MONARCH_STATUS, {"status": "scheduled_refresh", "device_id": self._device_id}
+                EVENT_MONARCH_STATUS, {"status": "scheduled_refresh", "device_id": self._device_id, "entity_id": self._entity_id}
             )
 
     async def _eod1_summary(self) -> None:
@@ -582,7 +588,7 @@ class ScheduledFeatures:
 
             stocks[symbol] = entry
 
-        self.hass.bus.async_fire(EVENT_EOD_SUMMARY, {"stocks": stocks, "device_id": self._device_id})
+        self.hass.bus.async_fire(EVENT_EOD_SUMMARY, {"stocks": stocks, "device_id": self._device_id, "entity_id": self._entity_id})
 
     async def _eod2_start_watch(self) -> None:
         sensor_id = self._opt(CONF_401K_SENSOR, "")
@@ -650,6 +656,7 @@ class ScheduledFeatures:
                 "day_change_pct": round(change_pct, 2) if isinstance(change_pct, float) else change_pct,
                 "deferred": in_quiet,
                 "device_id": self._device_id,
+                "entity_id": self._entity_id,
             }
 
             if in_quiet:
