@@ -7,16 +7,18 @@ A Home Assistant custom integration (HACS) for tracking stock prices and, option
 - **Stock tracking** — add/remove tickers from the HA UI, pluggable price provider (Finnhub by default), configurable poll frequency
 - **Market-hours aware** — full NYSE holiday calendar (with early closes) gates polling and scheduled events, computed locally with no external dependency
 - **Timezone-correct scheduling** — a configurable market timezone (Eastern by default) drives every scheduled event, so they fire at the right moment whatever Home Assistant's own timezone is, and stay correct across DST
-- **Price alerts** — event fired when a symbol moves past a configurable threshold
+- **Price alerts** — event fired when a symbol's daily change from previous close exceeds a configurable threshold, with configurable cooldown per symbol (15 min – 4 hours)
 - **End-of-day summary** — fired at market close, including per-position P/L when Monarch is connected
 - **Today's P&L sensor** — real-time daily P&L across selected Monarch investment accounts, using live Finnhub prices where available and falling back to Monarch's daily change. Configurable ticker mapping lets you pair each holding to a live symbol
 - **Monarch Money (optional)** — account balances, individual stock holdings within investment/brokerage/IRA accounts, paycheck detection, and a double-refresh workaround for a known Monarch API race condition. Selectable accounts let you import only what you need. Uses the community-maintained [monarchmoneycommunity](https://github.com/bradleyseanf/monarchmoneycommunity) package; not affiliated with or endorsed by Monarch Money
 - **401k delayed NAV reporting** — watches a Monarch holding sensor for value changes after market close, defers notifications during configurable quiet hours and releases them the next morning. Manual trigger button available for on-demand checks
 - **Finnhub self-test** — validates API connectivity once per trading day
-- **Manual refresh buttons** — button entities to trigger stock and Monarch data refreshes on demand, plus a 401k Update button for manual NAV watch
+- **Manual refresh buttons** — button entities to trigger stock and Monarch data refreshes on demand, plus Sync Monarch Accounts (real bank sync) and 401k Update for manual NAV watch
 - **Test notifications** — select a notification type from a dropdown and fire a test event, all from within the integration (no Developer Tools needed)
 - **Repair issues** — surfaces connection failures, API problems, and package updates as HA repair issues with one-click fixes where possible
-- **Debug logging** — toggle verbose logging on/off from the options flow
+- **Account sync** — trigger a real bank sync via Monarch's API with configurable cooldown (4–24 hours), with completion status in the logbook
+- **Daily change % sensors** — per-symbol percentage change sensors for history graph charting
+- **Debug logging** — toggle verbose logging on/off from a switch entity on the device page (session-only, no integration reload)
 - **Diagnostics** — Market Status, Last Stock Poll, and Monarch Package Version sensors show at a glance whether the market is open, when prices last updated, and what Monarch library version is installed
 - **Logbook integration** — all scheduled actions and events (polls, price alerts, summaries, paycheck detection, Monarch refreshes) appear in the device's Activity tab
 - **Device grouping** — all entities are grouped under a single HA Stock App device with proper `SensorDeviceClass.MONETARY` for currency display
@@ -53,9 +55,10 @@ All events are fired on the HA event bus (`ha_stock_app_*`). The integration tra
 │  │  Button Platform      │    │  Select Platform                │   │
 │  │  Refresh stocks       │    │  Test notification type picker  │   │
 │  │  Refresh Monarch      │    └──────────────────────────────────┘   │
-│  │  401k Update          │                                          │
-│  │  Send test notif.     │                                          │
-│  └──────────────────────┘                                           │
+│  │  Sync Monarch         │    ┌──────────────────────────────────┐   │
+│  │  401k Update          │    │  Switch Platform                │   │
+│  │  Send test notif.     │    │  Debug logging toggle           │   │
+│  └──────────────────────┘    └──────────────────────────────────┘   │
 │                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │                   Scheduled Features                         │   │
@@ -71,7 +74,7 @@ All events are fired on the HA event bus (`ha_stock_app_*`). The integration tra
 │  │  ha_stock_app_price_alert     ha_stock_app_eod2_summary      │   │
 │  │  ha_stock_app_market_open     ha_stock_app_paycheck_detected │   │
 │  │  ha_stock_app_finnhub_error   ha_stock_app_monarch_status    │   │
-│  │  ha_stock_app_finnhub_ok                                     │   │
+│  │  ha_stock_app_finnhub_ok      ha_stock_app_monarch_sync     │   │
 │  └──────────────┬───────────────────────────────────────────────┘   │
 │                 │                                                    │
 │                 ▼                                                    │
@@ -89,12 +92,13 @@ All events are fired on the HA event bus (`ha_stock_app_*`). The integration tra
 | `config_flow.py` | Multi-step config and options flow: stock API setup → Monarch auth → account selection → P&L ticker mapping → advanced settings (paycheck/401k) |
 | `coordinator.py` | Two HA `DataUpdateCoordinator` subclasses — `StockCoordinator` polls Finnhub on a configurable interval with market-hours gating and price alerts; `MonarchCoordinator` polls Monarch with paycheck detection and a double-refresh mechanism |
 | `sensor.py` | All sensor entities plus stale-entity cleanup. `TodayPLSensor` bridges both coordinators, using live Finnhub prices where a ticker mapping exists and Monarch's daily change as fallback |
-| `button.py` | Manual refresh buttons (stocks, Monarch, 401k trigger, test notification). Stock and 401k buttons fire their corresponding events immediately |
+| `button.py` | Manual refresh buttons (stocks, Monarch, 401k trigger, test notification) and Sync Monarch Accounts (real bank sync with configurable cooldown). Stock and 401k buttons fire their corresponding events immediately |
 | `select.py` | Test notification type picker — sets which event the test button fires |
+| `switch.py` | Debug logging toggle — session-only switch that sets the integration's log level without triggering an integration reload |
 | `market.py` | NYSE calendar (holidays, early closes, trading-day checks), timezone resolution, `next_market_time` schedule resolver, quiet-hours logic, pay-window parser. Zero HA dependencies at module scope — testable standalone |
 | `monarch.py` | Monarch Money API client: session persistence with `0o600` file permissions, exponential login backoff (rate-limit-aware), holdings retrieval with explicit error distinction from empty results |
 | `providers.py` | Stock provider abstraction (`StockProvider` ABC) with `FinnhubProvider` implementation. 15-second request timeout. Symbol validation via regex |
-| `logbook.py` | Logbook event descriptions for all nine event types |
+| `logbook.py` | Logbook event descriptions for all ten event types |
 | `repairs.py` | Monarch package update repair flow — one-click pip upgrade from the HA repairs UI |
 
 ### Key design decisions
@@ -149,6 +153,21 @@ python3 -m unittest discover tests
 ```
 
 ## Version History
+
+### v2.7.0 — 2026-07-28
+- **Added Monarch account sync button** — triggers a real bank sync via Monarch's `request_accounts_refresh_and_wait` API (not just a cached data refresh), with a 5-minute timeout. Fires `ha_stock_app_monarch_sync` events (started, completed, failed, cooldown) visible in the logbook
+- **Added configurable sync cooldown** — prevents excessive sync requests with a configurable cooldown (4–24 hours, default 4h). Session-only tracking resets on restart. Configurable via the options flow
+- Monarch coordinator gains `async_sync_accounts()` — runs the bank sync, then auto-refreshes the coordinator on success
+- Logbook descriptions for all four sync event statuses (started, completed with duration, failed, cooldown with remaining time)
+
+### v2.6.1 — 2026-07-27
+- Bumped manifest version to match v2.6.0 release
+
+### v2.6.0 — 2026-07-27
+- **Moved debug logging to a switch entity** — toggle on the device page instead of the options flow. Session-only (sets logger level directly, no integration reload)
+- **Added Monarch manual refresh to Activity logbook** — the Refresh Monarch Accounts button now fires an `ha_stock_app_monarch_status` event with `status: manual_refresh`, appearing in the device's Activity tab
+- New `switch` platform registered in `PLATFORMS`
+- Removed `enable_debug_logging` from options flow schema
 
 ### v2.5.6 — 2026-07-26
 - **Added Today's P&L sensor** — real-time daily P&L across selected Monarch investment accounts, using live Finnhub prices where available with Monarch daily change as fallback
