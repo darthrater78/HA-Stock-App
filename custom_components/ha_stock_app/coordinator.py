@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     TimestampDataUpdateCoordinator,
@@ -59,6 +60,8 @@ _LOGGER = logging.getLogger(__name__)
 
 SENSITIVE_KEYS = {CONF_API_KEY, CONF_MONARCH_PASSWORD, CONF_MONARCH_MFA_SECRET}
 _SKIP_HOLDING_TYPES = {"depository", "credit", "loan"}
+_CC_STORE_KEY = f"{DOMAIN}.credit_card_balances"
+_CC_STORE_VERSION = 1
 
 
 def _strip_sensitive(config: dict[str, Any]) -> dict[str, Any]:
@@ -209,6 +212,8 @@ class MonarchCoordinator(DataUpdateCoordinator):
         self._was_available = True
         self._previous_cash: float | None = None
         self._previous_cc: dict[str, float] = {}
+        self._cc_store: Store = Store(hass, _CC_STORE_VERSION, _CC_STORE_KEY)
+        self._cc_store_loaded = False
         self._double_refresh_unsub = None
 
         poll_minutes = int(config.get(CONF_MONARCH_POLL_INTERVAL, DEFAULT_MONARCH_POLL_INTERVAL))
@@ -367,12 +372,39 @@ class MonarchCoordinator(DataUpdateCoordinator):
                     self.hass.bus.async_fire(EVENT_PAYCHECK_DETECTED, paycheck_data)
             self._previous_cash = total_cash
 
-        for acct in accounts:
-            if (acct.type_name or "").lower() != "credit":
-                continue
+        credit_accounts = [
+            a for a in accounts
+            if (a.type_name or "").lower() == "credit"
+        ]
+        if not credit_accounts:
+            _LOGGER.debug(
+                "No credit-type accounts found; account types present: %s",
+                {a.name: a.type_name for a in accounts},
+            )
+
+        if not self._cc_store_loaded:
+            stored = await self._cc_store.async_load()
+            if stored and isinstance(stored, dict):
+                self._previous_cc = stored
+                _LOGGER.debug(
+                    "Restored %d credit card balances from storage",
+                    len(stored),
+                )
+            self._cc_store_loaded = True
+
+        for acct in credit_accounts:
             curr = round(acct.balance, 2)
             prev = self._previous_cc.get(acct.id)
-            if prev is not None and curr != prev:
+            if prev is None:
+                _LOGGER.debug(
+                    "Credit card %s (%s): seeding initial balance $%.2f",
+                    acct.name, acct.id, curr,
+                )
+            elif curr != prev:
+                _LOGGER.debug(
+                    "Credit card %s (%s): balance changed $%.2f -> $%.2f, firing event",
+                    acct.name, acct.id, prev, curr,
+                )
                 self.hass.bus.async_fire(EVENT_CREDIT_CARD_CHANGE, {
                     "account": acct.name,
                     "account_id": acct.id,
@@ -383,5 +415,8 @@ class MonarchCoordinator(DataUpdateCoordinator):
                     "entity_id": self.entity_id,
                 })
             self._previous_cc[acct.id] = curr
+
+        if credit_accounts:
+            await self._cc_store.async_save(self._previous_cc)
 
         return result
