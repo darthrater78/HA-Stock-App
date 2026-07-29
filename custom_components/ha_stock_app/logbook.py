@@ -58,10 +58,13 @@ def async_describe_events(
     @callback
     def describe_eod2_summary(event: Event) -> dict[str, str]:
         d = event.data
-        return {
-            LOGBOOK_ENTRY_NAME: NAME,
-            LOGBOOK_ENTRY_MESSAGE: f"401k update: ${d.get('new_value', 0):,.2f} ({d.get('day_change_pct', 0):+.2f}%)",
-        }
+        new_val = d.get("new_value") or 0
+        pct = d.get("day_change_pct") or 0
+        try:
+            msg = f"401k update: ${float(new_val):,.2f} ({float(pct):+.2f}%)"
+        except (TypeError, ValueError):
+            msg = f"401k update: value={new_val}, change={pct}%"
+        return {LOGBOOK_ENTRY_NAME: NAME, LOGBOOK_ENTRY_MESSAGE: msg}
 
     @callback
     def describe_paycheck(event: Event) -> dict[str, str]:
