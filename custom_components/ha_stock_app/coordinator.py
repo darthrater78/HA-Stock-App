@@ -367,12 +367,28 @@ class MonarchCoordinator(DataUpdateCoordinator):
                     self.hass.bus.async_fire(EVENT_PAYCHECK_DETECTED, paycheck_data)
             self._previous_cash = total_cash
 
-        for acct in accounts:
-            if (acct.type_name or "").lower() != "credit":
-                continue
+        credit_accounts = [
+            a for a in accounts
+            if (a.type_name or "").lower() == "credit"
+        ]
+        if not credit_accounts:
+            _LOGGER.debug(
+                "No credit-type accounts found; account types present: %s",
+                {a.name: a.type_name for a in accounts},
+            )
+        for acct in credit_accounts:
             curr = round(acct.balance, 2)
             prev = self._previous_cc.get(acct.id)
-            if prev is not None and curr != prev:
+            if prev is None:
+                _LOGGER.debug(
+                    "Credit card %s (%s): seeding initial balance $%.2f",
+                    acct.name, acct.id, curr,
+                )
+            elif curr != prev:
+                _LOGGER.debug(
+                    "Credit card %s (%s): balance changed $%.2f -> $%.2f, firing event",
+                    acct.name, acct.id, prev, curr,
+                )
                 self.hass.bus.async_fire(EVENT_CREDIT_CARD_CHANGE, {
                     "account": acct.name,
                     "account_id": acct.id,
