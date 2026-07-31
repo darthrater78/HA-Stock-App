@@ -86,7 +86,7 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
         )
         self._tz = market_tz(config.get(CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE))
         self.last_api_poll: dt_util.dt.datetime | None = None
-        self._force_update_count = 0
+        self._force_next_update = False
 
         _LOGGER.info(
             "StockCoordinator initialized: poll every %ds, market hours gate %s, stocks %s",
@@ -127,15 +127,14 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
         return first_entity_id(self.hass, self._entry_id)
 
     async def async_force_refresh(self) -> None:
-        self._force_update_count += 1
-        try:
-            await self.async_request_refresh()
-        finally:
-            self._force_update_count -= 1
+        self._force_next_update = True
+        await self.async_request_refresh()
 
     async def _async_update_data(self) -> dict[str, StockQuote]:
-        _LOGGER.debug("Stock poll triggered (interval=%ds)", self._poll_seconds)
-        if self._market_hours_enabled and self._force_update_count == 0:
+        force = self._force_next_update
+        self._force_next_update = False
+        _LOGGER.debug("Stock poll triggered (interval=%ds, force=%s)", self._poll_seconds, force)
+        if self._market_hours_enabled and not force:
             from .market import NYSECalendar
             if not NYSECalendar.is_market_open(market_now(self.hass, self._tz), self._tz):
                 _LOGGER.debug("Market closed — returning cached data")
