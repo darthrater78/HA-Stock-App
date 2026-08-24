@@ -168,6 +168,9 @@ python3 -m unittest discover tests
 
 ## Version History
 
+### v2.7.8 — 2026-08-24
+- Bumped `monarchmoneycommunity` minimum version to 1.5.2
+
 ### v2.7.3 — 2026-07-28
 - **Added credit card balance change notifications** — fires `ha_stock_app_credit_card_change` whenever any credit card balance changes between Monarch polls (payments, charges, refunds). Includes account name, previous/new balance, and change amount. Logbook handler, test event, and notification type selector option included
 - Node-RED example flow updated with credit card change listener and formatter nodes
