@@ -46,6 +46,7 @@
         "title": "HA Stock App Settings",
         "data": {
           "stocks": "Stock Symbols (comma-separated)",
+          "api_key": "API Key (leave blank to keep current)",
           "poll_frequency": "Poll Frequency",
           "market_timezone": "Market Timezone",
           "alert_threshold": "Alert Threshold (%)",
@@ -93,6 +94,9 @@
       }
     },
     "error": {
+      "no_stocks": "Enter at least one stock symbol.",
+      "stock_api_failed": "Could not fetch a quote with this API key. Check the key and try again.",
+      "invalid_symbols": "One or more symbols are invalid. Use 1-10 characters: letters, numbers, dots, or hyphens.",
       "invalid_time": "Enter a time as HH:MM in 24-hour form, for example 08:35.",
       "invalid_pay_windows": "Enter day ranges as day-day separated by commas, for example 27-5,11-19. Days must be 1-31."
     }

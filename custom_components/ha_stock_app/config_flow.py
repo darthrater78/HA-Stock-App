@@ -325,12 +325,17 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                 errors[CONF_STOCKS] = "invalid_symbols"
             elif not stocks:
                 errors[CONF_STOCKS] = "no_stocks"
-            else:
+
+            if not errors:
                 new_data = {**self._config_entry.data}
                 new_data[CONF_STOCKS] = stocks
                 new_data[CONF_POLL_FREQUENCY] = user_input.get(CONF_POLL_FREQUENCY, str(DEFAULT_POLL_FREQUENCY))
                 new_data[CONF_ALERT_THRESHOLD] = user_input.get(CONF_ALERT_THRESHOLD, DEFAULT_ALERT_THRESHOLD)
                 new_data[CONF_ALERT_COOLDOWN] = user_input.get(CONF_ALERT_COOLDOWN, str(DEFAULT_ALERT_COOLDOWN))
+
+                new_api_key = user_input.get(CONF_API_KEY, "").strip()
+                if new_api_key:
+                    new_data[CONF_API_KEY] = new_api_key
 
                 monarch_enabled = user_input.get(CONF_MONARCH_ENABLED, False)
                 new_data[CONF_MONARCH_ENABLED] = monarch_enabled
@@ -345,46 +350,63 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
                     if mfa:
                         new_data[CONF_MONARCH_MFA_SECRET] = mfa
 
-                self.hass.config_entries.async_update_entry(self._config_entry, data=new_data)
-
-                self._options = {**self._config_entry.options}
-                self._options.update({
-                    CONF_ENABLE_MARKET_HOURS: user_input.get(CONF_ENABLE_MARKET_HOURS, DEFAULT_ENABLE_MARKET_HOURS),
-                    CONF_ENABLE_EOD_SUMMARY: user_input.get(CONF_ENABLE_EOD_SUMMARY, DEFAULT_ENABLE_EOD_SUMMARY),
-                    CONF_ENABLE_MARKET_OPEN_EVENT: user_input.get(CONF_ENABLE_MARKET_OPEN_EVENT, DEFAULT_ENABLE_MARKET_OPEN_EVENT),
-                    CONF_ENABLE_FINNHUB_SELF_TEST: user_input.get(CONF_ENABLE_FINNHUB_SELF_TEST, DEFAULT_ENABLE_FINNHUB_SELF_TEST),
-                })
-
-                self._options[CONF_MARKET_TIMEZONE] = user_input.get(
-                    CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE
-                )
-
-                if monarch_enabled:
-                    self._options[CONF_MONARCH_POLL_INTERVAL] = user_input.get(
-                        CONF_MONARCH_POLL_INTERVAL, str(DEFAULT_MONARCH_POLL_INTERVAL)
+                if new_api_key:
+                    provider = get_provider(
+                        new_data.get(CONF_API_PROVIDER, DEFAULT_PROVIDER),
+                        new_api_key,
+                        async_get_clientsession(self.hass),
                     )
-                    self._options[CONF_MONARCH_SYNC_COOLDOWN] = user_input.get(
-                        CONF_MONARCH_SYNC_COOLDOWN, str(DEFAULT_MONARCH_SYNC_COOLDOWN)
-                    )
-                    self._options[CONF_ENABLE_MONARCH_DOUBLE_REFRESH] = user_input.get(
-                        CONF_ENABLE_MONARCH_DOUBLE_REFRESH, DEFAULT_ENABLE_MONARCH_DOUBLE_REFRESH
-                    )
-                    self._options[CONF_ENABLE_PAYCHECK_DETECTION] = user_input.get(
-                        CONF_ENABLE_PAYCHECK_DETECTION, DEFAULT_ENABLE_PAYCHECK_DETECTION
-                    )
-                    self._options[CONF_ENABLE_401K_REPORTING] = user_input.get(
-                        CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING
-                    )
-                    return await self.async_step_select_accounts()
+                    test_symbol = stocks[0]
+                    try:
+                        quote = await provider.get_quote(test_symbol)
+                    except Exception:
+                        _LOGGER.exception("Stock API test failed for %s", test_symbol)
+                        quote = None
 
-                needs_advanced = (
-                    self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False)
-                    or self._options.get(CONF_ENABLE_401K_REPORTING, False)
-                )
-                if needs_advanced:
-                    return await self.async_step_advanced()
+                    if quote is None:
+                        errors[CONF_API_KEY] = "stock_api_failed"
 
-                return self.async_create_entry(title="", data=self._options)
+                if not errors:
+                    self.hass.config_entries.async_update_entry(self._config_entry, data=new_data)
+
+                    self._options = {**self._config_entry.options}
+                    self._options.update({
+                        CONF_ENABLE_MARKET_HOURS: user_input.get(CONF_ENABLE_MARKET_HOURS, DEFAULT_ENABLE_MARKET_HOURS),
+                        CONF_ENABLE_EOD_SUMMARY: user_input.get(CONF_ENABLE_EOD_SUMMARY, DEFAULT_ENABLE_EOD_SUMMARY),
+                        CONF_ENABLE_MARKET_OPEN_EVENT: user_input.get(CONF_ENABLE_MARKET_OPEN_EVENT, DEFAULT_ENABLE_MARKET_OPEN_EVENT),
+                        CONF_ENABLE_FINNHUB_SELF_TEST: user_input.get(CONF_ENABLE_FINNHUB_SELF_TEST, DEFAULT_ENABLE_FINNHUB_SELF_TEST),
+                    })
+
+                    self._options[CONF_MARKET_TIMEZONE] = user_input.get(
+                        CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE
+                    )
+
+                    if monarch_enabled:
+                        self._options[CONF_MONARCH_POLL_INTERVAL] = user_input.get(
+                            CONF_MONARCH_POLL_INTERVAL, str(DEFAULT_MONARCH_POLL_INTERVAL)
+                        )
+                        self._options[CONF_MONARCH_SYNC_COOLDOWN] = user_input.get(
+                            CONF_MONARCH_SYNC_COOLDOWN, str(DEFAULT_MONARCH_SYNC_COOLDOWN)
+                        )
+                        self._options[CONF_ENABLE_MONARCH_DOUBLE_REFRESH] = user_input.get(
+                            CONF_ENABLE_MONARCH_DOUBLE_REFRESH, DEFAULT_ENABLE_MONARCH_DOUBLE_REFRESH
+                        )
+                        self._options[CONF_ENABLE_PAYCHECK_DETECTION] = user_input.get(
+                            CONF_ENABLE_PAYCHECK_DETECTION, DEFAULT_ENABLE_PAYCHECK_DETECTION
+                        )
+                        self._options[CONF_ENABLE_401K_REPORTING] = user_input.get(
+                            CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING
+                        )
+                        return await self.async_step_select_accounts()
+
+                    needs_advanced = (
+                        self._options.get(CONF_ENABLE_PAYCHECK_DETECTION, False)
+                        or self._options.get(CONF_ENABLE_401K_REPORTING, False)
+                    )
+                    if needs_advanced:
+                        return await self.async_step_advanced()
+
+                    return self.async_create_entry(title="", data=self._options)
 
         current = self._config_entry.data
         opts = self._config_entry.options
@@ -393,6 +415,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
 
         schema = vol.Schema({
             vol.Required(CONF_STOCKS, default=", ".join(current.get(CONF_STOCKS, []))): str,
+            vol.Optional(CONF_API_KEY, default=""): str,
             vol.Required(CONF_POLL_FREQUENCY, default=saved_poll): vol.In(POLL_OPTIONS),
             vol.Optional(CONF_ALERT_THRESHOLD, default=current.get(CONF_ALERT_THRESHOLD, DEFAULT_ALERT_THRESHOLD)): vol.All(
                 vol.Coerce(float), vol.Range(min=0.1, max=100.0)
