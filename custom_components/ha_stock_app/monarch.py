@@ -85,6 +85,7 @@ class MonarchClient:
         # dependency into an account-wide lockout affecting other integrations.
         self._last_login_attempt: float = 0.0
         self._login_backoff: float = 0.0
+        self._consecutive_fetch_failures: int = 0
 
     @property
     def _session_file(self) -> Path | None:
@@ -186,13 +187,20 @@ class MonarchClient:
                         type_name=acct.get("type", {}).get("name", ""),
                     )
                 )
+            self._consecutive_fetch_failures = 0
             return accounts
         except Exception as exc:
-            # Deliberately does NOT discard the session. A failure here is
-            # usually a data or dependency fault, not an expired login -- and
-            # discarding it forced a fresh login on the very next poll, which
-            # is how a persistent error became a stream of 429s.
-            _LOGGER.error("Monarch Money fetch failed: %s", type(exc).__name__)
+            self._consecutive_fetch_failures += 1
+            if self._consecutive_fetch_failures >= 3:
+                _LOGGER.warning(
+                    "Monarch Money: %d consecutive fetch failures, "
+                    "clearing session to allow re-authentication",
+                    self._consecutive_fetch_failures,
+                )
+                self._mm = None
+                self._consecutive_fetch_failures = 0
+            else:
+                _LOGGER.error("Monarch Money fetch failed: %s", type(exc).__name__)
             _LOGGER.debug("Monarch Money fetch failure details", exc_info=True)
             return []
 

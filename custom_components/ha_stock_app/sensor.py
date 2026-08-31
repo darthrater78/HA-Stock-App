@@ -102,7 +102,6 @@ async def async_setup_entry(
 
 class StockPriceSensor(CoordinatorEntity, SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "USD"
     _attr_icon = "mdi:chart-line"
 
@@ -320,7 +319,6 @@ class TodayPLSensor(CoordinatorEntity, SensorEntity):
     """
 
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "USD"
     _attr_icon = "mdi:currency-usd"
 
@@ -443,7 +441,7 @@ class TodayPLSensor(CoordinatorEntity, SensorEntity):
         if not self.coordinator.data:
             return {}
         total, details = self._get_computed()
-        live_count = sum(1 for d in details if d["source"] == "live")
+        live_count = sum(1 for d in details if d["source"].startswith("live"))
         return {
             "holdings": details,
             "holding_count": len(details),

@@ -168,6 +168,11 @@ python3 -m unittest discover tests
 
 ## Version History
 
+### v2.7.9 — 2026-08-31
+- **Added API key to reconfigure flow** — change your Finnhub API key from the options flow with a live validation test before saving
+- **Fixed P&L live_count diagnostic attribute** — source strings are `"live:VOO"` not `"live"`, so `startswith` replaces exact match; P&L dollar values were always correct but `live_count`/`fallback_count` attributes were wrong
+- **Added Monarch session auto-recovery** — after 3 consecutive fetch failures, clears the cached session to allow re-authentication instead of silently retrying with an expired session forever
+
 ### v2.7.8 — 2026-08-24
 - Bumped `monarchmoneycommunity` minimum version to 1.5.2
 
