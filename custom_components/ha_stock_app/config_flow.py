@@ -643,9 +643,7 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             schema_dict[vol.Optional(CONF_PAYCHECK_WINDOWS, default=opts.get(CONF_PAYCHECK_WINDOWS, DEFAULT_PAYCHECK_WINDOWS))] = str
 
         if self._options.get(CONF_ENABLE_401K_REPORTING, False):
-            # Entity picker instead of free text — a typo'd entity ID used to
-            # fail silently and the 401k watch simply never ran.
-            schema_dict[vol.Optional(CONF_401K_SENSOR, default=opts.get(CONF_401K_SENSOR, ""))] = selector.EntitySelector(
+            schema_dict[vol.Required(CONF_401K_SENSOR, default=opts.get(CONF_401K_SENSOR, ""))] = selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             )
             schema_dict[vol.Optional(CONF_401K_QUIET_START, default=opts.get(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START))] = str

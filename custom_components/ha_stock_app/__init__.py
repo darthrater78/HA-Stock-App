@@ -626,6 +626,8 @@ class ScheduledFeatures:
                 "401k sensor %s is %s; skipping baseline capture",
                 sensor_id, state.state,
             )
+            retry_minutes = int(self._opt(CONF_401K_RETRY_INTERVAL, DEFAULT_401K_RETRY_INTERVAL))
+            self._schedule_eod2_retry(retry_minutes)
             return
 
         if self._eod2_retry_unsub:
@@ -635,6 +637,18 @@ class ScheduledFeatures:
         self._eod2_baseline = state.state
         retry_minutes = int(self._opt(CONF_401K_RETRY_INTERVAL, DEFAULT_401K_RETRY_INTERVAL))
         await self._eod2_check_and_retry(retry_minutes)
+
+    def _schedule_eod2_retry(self, retry_minutes: int) -> None:
+        @callback
+        def _retry(_now):
+            self._eod2_retry_unsub = None
+            self.hass.async_create_task(
+                self._eod2_check_and_retry(retry_minutes)
+            )
+
+        self._eod2_retry_unsub = async_call_later(
+            self.hass, retry_minutes * 60, _retry
+        )
 
     async def _eod2_check_and_retry(self, retry_minutes: int) -> None:
         from .market import in_quiet_hours, market_now, parse_time_of_day
@@ -654,16 +668,7 @@ class ScheduledFeatures:
                 "401k sensor %s is %s; keeping retry alive",
                 sensor_id, current_value,
             )
-            @callback
-            def _retry_unavailable(_now):
-                self._eod2_retry_unsub = None
-                self.hass.async_create_task(
-                    self._eod2_check_and_retry(retry_minutes)
-                )
-
-            self._eod2_retry_unsub = async_call_later(
-                self.hass, retry_minutes * 60, _retry_unavailable
-            )
+            self._schedule_eod2_retry(retry_minutes)
             return
 
         if current_value != self._eod2_baseline:
@@ -716,16 +721,7 @@ class ScheduledFeatures:
         # NAV update this feature exists to catch typically posts overnight.
         # The event itself is deferred (see above); this loop only stops
         # once a change is found or the next trading day's watch restarts it.
-        @callback
-        def _retry(_now):
-            self._eod2_retry_unsub = None
-            self.hass.async_create_task(
-                self._eod2_check_and_retry(retry_minutes)
-            )
-
-        self._eod2_retry_unsub = async_call_later(
-            self.hass, retry_minutes * 60, _retry
-        )
+        self._schedule_eod2_retry(retry_minutes)
 
     async def _eod2_morning_release(self) -> None:
         if self._eod2_deferred:

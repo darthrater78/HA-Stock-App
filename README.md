@@ -168,6 +168,12 @@ python3 -m unittest discover tests
 
 ## Version History
 
+### v2.7.11 — 2026-09-10
+- **Fixed 401k watch dying when sensor is unavailable at trigger time** — `_eod2_start_watch` now schedules a retry instead of silently giving up when the sensor reads `unavailable`/`unknown` at the daily 16:05 trigger
+- **Fixed Refresh button using wrong timezone for market-hours check** — `RefreshStocksButton` now passes the configured market timezone to `market_now`/`is_market_open` instead of defaulting to ET
+- **401k sensor field restored to Required** — prevents saving the config with a blank sensor entity, which silently disabled the watch
+- Deduplicated retry scheduling into a shared `_schedule_eod2_retry` helper
+
 ### v2.7.10 — 2026-09-10
 - **Fixed 401k daily watch never firing** — the watch and morning release only ran on trading days, but the 401k NAV posts overnight including weekends and holidays; both now run every calendar day
 - **Fixed 401k watch silently dying on unavailable sensor** — an `unavailable`/`unknown` state at watch start was saved as the baseline, poisoning every later comparison; baseline capture is now skipped and the retry loop stays alive through unavailable reads
