@@ -421,8 +421,13 @@ class ScheduledFeatures:
     def _monarch_coordinator(self):
         return self._data.get("monarch_coordinator")
 
-    def _schedule_daily(self, hour: int, minute: int, handler: Any) -> None:
-        """Run handler each trading day at hour:minute in the market timezone.
+    def _schedule_daily(self, hour: int, minute: int, handler: Any, run_on_holidays: bool = False) -> None:
+        """Run handler each day at hour:minute in the market timezone.
+
+        When `run_on_holidays` is False (default) the handler only fires on
+        trading days; when True it fires every calendar day — used for the
+        401k watch because the NAV posts overnight even when the market is
+        closed, so weekends and holidays are exactly when the update lands.
 
         async_track_time_change cannot express this: it matches Home Assistant's
         local wall clock, and the offset to the market's clock shifts with DST --
@@ -443,7 +448,7 @@ class ScheduledFeatures:
         async def _fired(_now) -> None:
             holder[0] = None
             _arm()  # re-arm first, so a failing handler cannot break the chain
-            if NYSECalendar.is_trading_day(market_today(self.hass, self._tz)):
+            if run_on_holidays or NYSECalendar.is_trading_day(market_today(self.hass, self._tz)):
                 await handler()
 
         _arm()
@@ -478,14 +483,16 @@ class ScheduledFeatures:
             schedules.append((16, 0, CONF_ENABLE_MONARCH_DOUBLE_REFRESH, self._monarch_refresh))
 
         if self._opt(CONF_ENABLE_401K_REPORTING, DEFAULT_ENABLE_401K_REPORTING):
-            schedules.append((16, 5, CONF_ENABLE_401K_REPORTING, self._eod2_start_watch))
+            self._schedule_daily(16, 5, self._eod2_start_watch, run_on_holidays=True)
             quiet_end = parse_time_of_day(
                 self._opt(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END),
                 DEFAULT_401K_QUIET_END,
             )
-            schedules.append(
-                (quiet_end.hour, quiet_end.minute, CONF_ENABLE_401K_REPORTING, self._eod2_morning_release)
-            )
+            # Fires daily (run_on_holidays=True) in case the NAV deferral from
+            # a Friday or holiday lands in quiet hours — the morning release
+            # must also run on non-trading days, or it will miss the deferred
+            # event the next morning.
+            self._schedule_daily(quiet_end.hour, quiet_end.minute, self._eod2_morning_release, run_on_holidays=True)
 
         for hour, minute, toggle_key, handler in schedules:
             if not self._opt(toggle_key, OPTION_DEFAULTS.get(toggle_key, False)):
@@ -614,6 +621,13 @@ class ScheduledFeatures:
             _LOGGER.warning("401k sensor %s not found", sensor_id)
             return
 
+        if state.state in ("unavailable", "unknown"):
+            _LOGGER.warning(
+                "401k sensor %s is %s; skipping baseline capture",
+                sensor_id, state.state,
+            )
+            return
+
         if self._eod2_retry_unsub:
             self._eod2_retry_unsub()
             self._eod2_retry_unsub = None
@@ -635,6 +649,23 @@ class ScheduledFeatures:
             return
 
         current_value = state.state
+        if current_value in ("unavailable", "unknown"):
+            _LOGGER.debug(
+                "401k sensor %s is %s; keeping retry alive",
+                sensor_id, current_value,
+            )
+            @callback
+            def _retry_unavailable(_now):
+                self._eod2_retry_unsub = None
+                self.hass.async_create_task(
+                    self._eod2_check_and_retry(retry_minutes)
+                )
+
+            self._eod2_retry_unsub = async_call_later(
+                self.hass, retry_minutes * 60, _retry_unavailable
+            )
+            return
+
         if current_value != self._eod2_baseline:
             try:
                 new_val = float(current_value)

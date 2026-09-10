@@ -72,6 +72,13 @@ class RefreshStocksButton(ButtonEntity):
         coordinator = data.get("stock_coordinator")
         if coordinator:
             await coordinator.async_force_refresh()
+        # The EOD summary fires once after close. Pressing Refresh while the
+        # market is open just pulls a fresh quote; firing the event would feed
+        # the notification flow duplicate intraday data.
+        from .market import NYSECalendar, market_now
+        if NYSECalendar.is_market_open(market_now(self.hass)):
+            _LOGGER.debug("Stock refresh during market hours: quote refreshed, summary suppressed")
+            return
         scheduler = data.get("scheduler")
         if scheduler:
             await scheduler.async_trigger_eod_summary()

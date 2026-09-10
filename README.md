@@ -168,6 +168,13 @@ python3 -m unittest discover tests
 
 ## Version History
 
+### v2.7.10 — 2026-09-10
+- **Fixed 401k daily watch never firing** — the watch and morning release only ran on trading days, but the 401k NAV posts overnight including weekends and holidays; both now run every calendar day
+- **Fixed 401k watch silently dying on unavailable sensor** — an `unavailable`/`unknown` state at watch start was saved as the baseline, poisoning every later comparison; baseline capture is now skipped and the retry loop stays alive through unavailable reads
+- **Fixed Refresh Stock Prices firing a notification during market hours** — pressing the button while the market is open now refreshes quotes without firing the EOD summary event
+- **401k sensor option is now an entity picker** — replaces the free-text field so a typo'd entity ID can no longer silently disable the watch
+- Documented Monarch duplicate-holdings behavior (same 401k account appearing under two provider names)
+
 ### v2.7.9 — 2026-08-31
 - **Added API key to reconfigure flow** — change your Finnhub API key from the options flow with a live validation test before saving
 - **Fixed P&L live_count diagnostic attribute** — source strings are `"live:VOO"` not `"live"`, so `startswith` replaces exact match; P&L dollar values were always correct but `live_count`/`fallback_count` attributes were wrong
