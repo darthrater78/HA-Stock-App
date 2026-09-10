@@ -55,6 +55,12 @@ async def async_setup_entry(
         for acct_id, acct in monarch_coordinator.data.get("accounts", {}).items():
             if not selected_accounts or acct_id in selected_accounts:
                 entities.append(MonarchAccountSensor(monarch_coordinator, acct, entry))
+
+        # Holdings only expose what Monarch names them. When a 401k has been
+        # consolidated, the same account can return both its old ticker (e.g.
+        # Empower) and the new one (e.g. Legal & General), and the option picker
+        # then shows duplicates with no way to tell them apart. De-dupe is left
+        # to the user: disable the stale sensor in the HA UI.
         entities.append(MonarchNetWorthSensor(monarch_coordinator, entry))
         for holding_id, holding in monarch_coordinator.data.get("holdings", {}).items():
             if not selected_accounts or holding.account_id in selected_accounts:

@@ -10,6 +10,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers import selector
 
 from .const import (
     DOMAIN,
@@ -642,7 +643,11 @@ class HAStockAppOptionsFlow(config_entries.OptionsFlow):
             schema_dict[vol.Optional(CONF_PAYCHECK_WINDOWS, default=opts.get(CONF_PAYCHECK_WINDOWS, DEFAULT_PAYCHECK_WINDOWS))] = str
 
         if self._options.get(CONF_ENABLE_401K_REPORTING, False):
-            schema_dict[vol.Required(CONF_401K_SENSOR, default=opts.get(CONF_401K_SENSOR, ""))] = str
+            # Entity picker instead of free text — a typo'd entity ID used to
+            # fail silently and the 401k watch simply never ran.
+            schema_dict[vol.Optional(CONF_401K_SENSOR, default=opts.get(CONF_401K_SENSOR, ""))] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
             schema_dict[vol.Optional(CONF_401K_QUIET_START, default=opts.get(CONF_401K_QUIET_START, DEFAULT_401K_QUIET_START))] = str
             schema_dict[vol.Optional(CONF_401K_QUIET_END, default=opts.get(CONF_401K_QUIET_END, DEFAULT_401K_QUIET_END))] = str
             saved_retry = str(opts.get(CONF_401K_RETRY_INTERVAL) or DEFAULT_401K_RETRY_INTERVAL)
