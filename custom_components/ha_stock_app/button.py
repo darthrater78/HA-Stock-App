@@ -13,8 +13,10 @@ from homeassistant.helpers import device_registry as dr
 from .const import (
     CONF_401K_SENSOR,
     CONF_ENABLE_401K_REPORTING,
+    CONF_MARKET_TIMEZONE,
     CONF_MONARCH_SYNC_COOLDOWN,
     DEFAULT_ENABLE_401K_REPORTING,
+    DEFAULT_MARKET_TIMEZONE,
     DEFAULT_MONARCH_SYNC_COOLDOWN,
     DOMAIN,
     EVENT_EOD2_SUMMARY,
@@ -75,8 +77,9 @@ class RefreshStocksButton(ButtonEntity):
         # The EOD summary fires once after close. Pressing Refresh while the
         # market is open just pulls a fresh quote; firing the event would feed
         # the notification flow duplicate intraday data.
-        from .market import NYSECalendar, market_now
-        if NYSECalendar.is_market_open(market_now(self.hass)):
+        from .market import NYSECalendar, market_now, market_tz
+        tz = market_tz(self._entry.options.get(CONF_MARKET_TIMEZONE, DEFAULT_MARKET_TIMEZONE))
+        if NYSECalendar.is_market_open(market_now(self.hass, tz), tz):
             _LOGGER.debug("Stock refresh during market hours: quote refreshed, summary suppressed")
             return
         scheduler = data.get("scheduler")
