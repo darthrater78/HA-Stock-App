@@ -168,6 +168,11 @@ python3 -m unittest discover tests
 
 ## Version History
 
+### v2.7.14 — 2026-09-20
+- **Raised the `monarchmoneycommunity` minimum to 1.6.0** — Home Assistant installs it for you through its managed requirement path on the first restart after updating. If you already upgraded through the "package update available" repair, you are on it and nothing changes
+- **A behaviour change in 1.6.0 worth knowing about:** the package now lets `aiohttp` read proxy settings from the environment (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`) and credentials from `~/.netrc`, where 1.5.2 ignored both. With none of those set in your Home Assistant environment — the normal case — nothing changes. If a proxy **is** set, Monarch traffic now routes through it, and a proxy that terminates TLS will surface as a Monarch authentication failure rather than as anything mentioning a proxy
+- Checked against the live Monarch API before release: login, session resume, account list, per-account holdings and the account-sync request all behave as they did on 1.5.2, returning matching values
+
 ### v2.7.13 — 2026-09-20
 - **Fixed the end-of-day summary reporting an intraday price** — price polling stops at the closing bell, so the day's final quote was up to five minutes stale, and a refresh at or after 16:00 was refused by the market-hours gate and handed back cached data. The day's performance then stayed stale until the next market open. The summary now forces a fetch that bypasses the gate, and runs at 16:05 so the official close has settled. Measured on 2026-09-18: VOO was reported at 701.94, its 15:56 price, where the settled close was 701.78
 - **The summary still sends if that fetch fails**, using the last known prices and logging why — a stale notification beats no notification
