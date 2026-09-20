@@ -130,6 +130,19 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
         self._force_next_update = True
         await self.async_request_refresh()
 
+    async def async_force_refresh_now(self) -> None:
+        """Refresh immediately, bypassing the market-hours gate.
+
+        `async_force_refresh` goes through `async_request_refresh`, which is
+        debounced: it schedules the refresh and returns, so a caller that reads
+        `.data` straight afterwards can still be handed the previous poll. The
+        end-of-day summary needs the new prices in hand, so it awaits a real
+        refresh instead. Failures are reported through `last_update_success`
+        rather than raised, as with any coordinator refresh.
+        """
+        self._force_next_update = True
+        await self.async_refresh()
+
     async def _async_update_data(self) -> dict[str, StockQuote]:
         force = self._force_next_update
         self._force_next_update = False

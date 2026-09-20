@@ -475,7 +475,11 @@ class ScheduledFeatures:
             )
 
         if self._opt(CONF_ENABLE_EOD_SUMMARY, DEFAULT_ENABLE_EOD_SUMMARY):
-            schedules.append((16, 0, CONF_ENABLE_EOD_SUMMARY, self._eod1_summary))
+            # 16:05, not 16:00: the official close is not settled the instant
+            # the bell rings, and a quote fetched at 16:00:00 can still be the
+            # last intraday trade. The 401k watch already waits the same five
+            # minutes for the same reason.
+            schedules.append((16, 5, CONF_ENABLE_EOD_SUMMARY, self._eod1_summary))
 
         if self._monarch_coordinator and self._opt(
             CONF_ENABLE_MONARCH_DOUBLE_REFRESH, DEFAULT_ENABLE_MONARCH_DOUBLE_REFRESH
@@ -577,7 +581,30 @@ class ScheduledFeatures:
             )
 
     async def _eod1_summary(self) -> None:
-        quotes = self._stock_coordinator.data
+        # The market-hours gate stops polling at the close, so the last poll of
+        # the day lands up to one interval before it -- reporting an intraday
+        # price as the day's result. Force a fetch that bypasses the gate.
+        #
+        # A failure here must not cost the summary: prices from the last poll
+        # are still worth sending, and the alternative is no notification at
+        # all. async_refresh reports failure through last_update_success rather
+        # than raising, so both paths are handled.
+        coordinator = self._stock_coordinator
+        try:
+            await coordinator.async_force_refresh_now()
+        except Exception:
+            _LOGGER.warning(
+                "EOD summary: closing-price refresh raised, using last known prices",
+                exc_info=True,
+            )
+        else:
+            if not coordinator.last_update_success:
+                _LOGGER.warning(
+                    "EOD summary: closing-price refresh did not succeed, "
+                    "using last known prices"
+                )
+
+        quotes = coordinator.data
         if not quotes:
             return
 
