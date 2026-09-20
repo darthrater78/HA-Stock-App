@@ -128,7 +128,7 @@
           }
         },
         "abort": {
-          "update_failed": "The package upgrade failed. Check the Home Assistant logs for details, or try updating manually with HACS."
+          "update_failed": "The upgrade failed and nothing was changed. Either the package could not be downloaded, or its new version needs a dependency at a version Home Assistant pins — Home Assistant will not move those, because that breaks other integrations. Check the logs for the install error. Do not install the package by hand to work around a conflict; wait for a compatible release."
         }
       }
     }
