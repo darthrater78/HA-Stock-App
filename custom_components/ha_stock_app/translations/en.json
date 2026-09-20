@@ -120,12 +120,11 @@
     },
     "monarch_update_available": {
       "title": "Monarch Money package update available",
-      "description": "A newer version of the monarchmoneycommunity package is available (installed: {installed}, latest: {latest}).",
       "fix_flow": {
         "step": {
           "init": {
             "title": "Update Monarch Money Package",
-            "description": "This will upgrade monarchmoneycommunity from {installed} to {latest}. A Home Assistant restart will be required afterward."
+            "description": "A newer version of the monarchmoneycommunity package is available (installed: {installed}, latest: {latest}). Submitting will upgrade it; a Home Assistant restart will be required afterward."
           }
         },
         "abort": {
