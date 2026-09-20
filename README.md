@@ -168,6 +168,10 @@ python3 -m unittest discover tests
 
 ## Version History
 
+### v2.7.13 — 2026-09-20
+- **Fixed the end-of-day summary reporting an intraday price** — price polling stops at the closing bell, so the day's final quote was up to five minutes stale, and a refresh at or after 16:00 was refused by the market-hours gate and handed back cached data. The day's performance then stayed stale until the next market open. The summary now forces a fetch that bypasses the gate, and runs at 16:05 so the official close has settled. Measured on 2026-09-18: VOO was reported at 701.94, its 15:56 price, where the settled close was 701.78
+- **The summary still sends if that fetch fails**, using the last known prices and logging why — a stale notification beats no notification
+
 ### v2.7.12 — 2026-09-20
 - **Monarch package upgrades now install through Home Assistant** — the "package update available" repair called `pip install --upgrade` directly with no version constraints, so a new release of `monarchmoneycommunity` was free to move `aiohttp` or `gql` inside Home Assistant's shared Python environment. That is the same failure as the v2.3.2 `gql` conflict, which outlived removing this integration because Home Assistant never uninstalls pip packages. The repair now uses Home Assistant's own requirements installer: it applies HA's package pins, installs to the location HA picks for your install type, and fails the upgrade on a dependency conflict instead of succeeding and breaking unrelated integrations
 - **Retrying the repair now works** — Home Assistant remembers a failed install for the rest of the run and refuses to repeat it, so a transient failure (no network, PyPI unreachable) previously needed a restart before the button would do anything
