@@ -5,4 +5,5 @@ __pycache__/
 *.pem
 *.key
 
-.claude/dev-skills-gates.md
+# Local assistant working files: gate tracker, session handoff notes.
+.claude/
