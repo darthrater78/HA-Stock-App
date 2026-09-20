@@ -1,12 +1,5 @@
 {
   "name": "HA Stock App",
   "render_readme": true,
-  "domains": [
-    "sensor",
-    "button",
-    "select",
-    "switch"
-  ],
-  "iot_class": "cloud_polling",
   "homeassistant": "2024.1.0"
 }
