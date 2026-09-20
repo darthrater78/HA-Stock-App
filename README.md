@@ -168,6 +168,11 @@ python3 -m unittest discover tests
 
 ## Version History
 
+### v2.7.12 — 2026-09-20
+- **Monarch package upgrades now install through Home Assistant** — the "package update available" repair called `pip install --upgrade` directly with no version constraints, so a new release of `monarchmoneycommunity` was free to move `aiohttp` or `gql` inside Home Assistant's shared Python environment. That is the same failure as the v2.3.2 `gql` conflict, which outlived removing this integration because Home Assistant never uninstalls pip packages. The repair now uses Home Assistant's own requirements installer: it applies HA's package pins, installs to the location HA picks for your install type, and fails the upgrade on a dependency conflict instead of succeeding and breaking unrelated integrations
+- **Retrying the repair now works** — Home Assistant remembers a failed install for the rest of the run and refuses to repeat it, so a transient failure (no network, PyPI unreachable) previously needed a restart before the button would do anything
+- The upgrade-failed message now explains a dependency conflict, and no longer suggests upgrading the package by hand — that is the unsafe path this release removes
+
 ### v2.7.11 — 2026-09-10
 - **Fixed 401k watch dying when sensor is unavailable at trigger time** — `_eod2_start_watch` now schedules a retry instead of silently giving up when the sensor reads `unavailable`/`unknown` at the daily 16:05 trigger
 - **Fixed Refresh button using wrong timezone for market-hours check** — `RefreshStocksButton` now passes the configured market timezone to `market_now`/`is_market_open` instead of defaulting to ET
