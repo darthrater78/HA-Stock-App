@@ -1,19 +1,22 @@
 # Dev Skills gate state
-Track: work commit
+Track: release sequence
 Mode: semi-autonomous (approved 2026-09-24) — commits and the tag still require the user's approval
 Origin: darthrater78/HA-Stock-App (not a fork)
-Standards: n/a — HA integration, no auth/Docker; at-rest: HA config entry storage (HA-managed)
-Version: 2.7.14
+Standards: n/a — HA integration, no auth/Docker; at-rest: HA config entry storage (HA-managed); main-page links ✅
+Version: 2.7.15
 Updated: 2026-09-24
 
-🔢 VERSION    ⬜
-🔨 BUILD      ⬜
-🔒 SECURITY   ✅ 0 Critical, 0 High open — 2 Low open (not blocking a work commit)
-    Fixed: gate timeout (High); Python pin, actionlint workflow, release set -e,
-      manifest dependency audit (Medium); job-level write perm, CI-run race, fetch-depth (Low)
-    Open Low: no environment: approval on release; paths-ignore vs required checks
-    Unverified: Dependabot alerts repo setting (user to confirm)
-    Evidence: actionlint 1.7.12 clean; pip-audit 2.10.1 clean; 29 tests pass
-📄 DOCS       ⬜
-📦 RELEASE    ⬜
-🚀 SHIP       ⬜
+🔢 VERSION    ✅ all refs at 2.7.15, v2.7.14 tagged
+    manifest.json 2.7.15; README top links repo + v2.7.15 release notes (added)
+🔨 BUILD      ✅ CI-only + user check — HA runtime not installable here
+    HA needs Python >=3.14.2, container has 3.11; compile, pyflakes,
+    29 tests, actionlint all pass locally on a stable tree
+    Owed before tag: user confirms 9:30 fetch on their HA from the PR branch
+    Unproven release steps: "release" environment, gate empty-run retry
+🔒 SECURITY   ✅ 0 open — 0 Critical, 0 High
+    Pattern scan clean; pip-audit 2.10.1 clean on monarchmoneycommunity>=1.6.0
+    Fixed: unused dt_time import (Low, pre-existing); workflow audit Lows
+    Dependabot alerts setting: user to confirm (not queryable from here)
+📄 DOCS       ✅ v2.7.15 entry; schedule diagram corrected (EOD 16:05, 9:30 fetch)
+📦 RELEASE    ✅ commit approved 2026-09-24, release PR to master
+🚀 SHIP       ⏳ after merge: user verifies 9:30 fetch, then pushes v2.7.15 tag

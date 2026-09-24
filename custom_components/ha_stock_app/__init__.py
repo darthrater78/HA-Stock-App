@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import time as dt_time
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import Any
@@ -466,8 +465,12 @@ class ScheduledFeatures:
 
         schedules: list[tuple[int, int, str, Any]] = [
             (9, 15, CONF_ENABLE_FINNHUB_SELF_TEST, self._finnhub_self_test),
-            (9, 30, CONF_ENABLE_MARKET_OPEN_EVENT, self._market_open_notify),
         ]
+
+        # Always scheduled, not behind the market-open notification toggle: the
+        # opening price fetch is what every trading day needs, the event is the
+        # optional part.
+        self._schedule_daily(9, 30, self._market_open)
 
         if self._monarch_coordinator:
             schedules.append(
@@ -557,6 +560,42 @@ class ScheduledFeatures:
                 {"error": type(exc).__name__, "symbol": symbol, "device_id": self._device_id, "entity_id": self._entity_id},
             )
 
+    async def _refresh_prices_now(self, reason: str) -> None:
+        """Fetch prices immediately, bypassing the market-hours gate.
+
+        A failure must not cost the caller its notification: prices from the
+        last poll are still worth sending, and the alternative is nothing at
+        all. async_refresh reports failure through last_update_success rather
+        than raising, so both paths are handled.
+        """
+        coordinator = self._stock_coordinator
+        try:
+            await coordinator.async_force_refresh_now()
+        except Exception:
+            _LOGGER.warning(
+                "%s: price refresh raised, using last known prices", reason,
+                exc_info=True,
+            )
+        else:
+            if not coordinator.last_update_success:
+                _LOGGER.warning(
+                    "%s: price refresh did not succeed, using last known prices",
+                    reason,
+                )
+
+    async def _market_open(self) -> None:
+        # The market-hours gate pauses polling overnight, and the first poll
+        # after the bell lands wherever the update interval happens to fall --
+        # up to one full interval after 9:30, showing the previous close until
+        # then. Fetch at the open instead; the coordinator re-arms its interval
+        # from this refresh, so later polls stay aligned to the open.
+        #
+        # The fetch bypasses the gate so a timer firing a hair before 9:30:00
+        # is not refused as "market closed".
+        await self._refresh_prices_now("Market open")
+        if self._opt(CONF_ENABLE_MARKET_OPEN_EVENT, DEFAULT_ENABLE_MARKET_OPEN_EVENT):
+            await self._market_open_notify()
+
     async def _market_open_notify(self) -> None:
         from .market import NYSECalendar, market_today
         d = market_today(self.hass, self._tz)
@@ -584,27 +623,9 @@ class ScheduledFeatures:
         # The market-hours gate stops polling at the close, so the last poll of
         # the day lands up to one interval before it -- reporting an intraday
         # price as the day's result. Force a fetch that bypasses the gate.
-        #
-        # A failure here must not cost the summary: prices from the last poll
-        # are still worth sending, and the alternative is no notification at
-        # all. async_refresh reports failure through last_update_success rather
-        # than raising, so both paths are handled.
-        coordinator = self._stock_coordinator
-        try:
-            await coordinator.async_force_refresh_now()
-        except Exception:
-            _LOGGER.warning(
-                "EOD summary: closing-price refresh raised, using last known prices",
-                exc_info=True,
-            )
-        else:
-            if not coordinator.last_update_success:
-                _LOGGER.warning(
-                    "EOD summary: closing-price refresh did not succeed, "
-                    "using last known prices"
-                )
+        await self._refresh_prices_now("EOD summary")
 
-        quotes = coordinator.data
+        quotes = self._stock_coordinator.data
         if not quotes:
             return
 

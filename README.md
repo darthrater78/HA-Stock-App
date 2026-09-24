@@ -1,5 +1,7 @@
 # HA Stock App
 
+[GitHub repository](https://github.com/darthrater78/HA-Stock-App) · [Release notes for v2.7.15](https://github.com/darthrater78/HA-Stock-App/releases/tag/v2.7.15)
+
 A Home Assistant custom integration (HACS) for tracking stock prices and, optionally, Monarch Money account balances — with all scheduling and notification logic built into the integration itself.
 
 ## Features
@@ -63,9 +65,9 @@ All events are fired on the HA event bus (`ha_stock_app_*`). The integration tra
 │                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │                   Scheduled Features                         │   │
-│  │  9:15  Finnhub self-test          16:00  EOD summary         │   │
+│  │  9:15  Finnhub self-test          16:05  EOD summary         │   │
 │  │  9:25  Monarch double-refresh     16:00  Monarch refresh     │   │
-│  │  9:30  Market open notification   16:05  401k NAV watch      │   │
+│  │  9:30  Price fetch + open notice  16:05  401k NAV watch      │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │         │                                                           │
 │         ▼                                                           │
@@ -167,6 +169,12 @@ python3 -m unittest discover tests
 ```
 
 ## Version History
+
+### v2.7.15 — 2026-09-24
+- **Fixed prices showing the previous close after the opening bell** — the same problem the v2.7.13 end-of-day fix solved, at the other end of the day. With the market-hours gate on, polling pauses overnight and the first poll after 9:30 landed wherever the poll interval happened to fall, so with a 5-minute interval prices could show yesterday's close until about 9:35. Prices are now fetched at 9:30 every trading day, and the regular polls continue from there
+- **This no longer depends on the "Market open notification" option** — the fetch runs whether that notification is on or off. When it is on, the `ha_stock_app_market_open` event now fires after the fetch, so automations it triggers see the opening prices
+- **Releases can now wait for your approval** — the release workflow publishes through a `release` environment. Add a required reviewer under Settings → Environments → release to approve each release before it goes out; with no reviewer set, releases publish as before
+- Workflow hardening from a CI security audit: the release gate has a timeout and waits briefly for a CI run that has not registered yet, publishing permissions are limited to the publishing job, tests run on Python 3.11 and 3.14, workflow files are linted with actionlint, and the Monarch dependency is checked weekly with `pip-audit`
 
 ### v2.7.14 — 2026-09-20
 - **Raised the `monarchmoneycommunity` minimum to 1.6.0** — Home Assistant installs it for you through its managed requirement path on the first restart after updating. If you already upgraded through the "package update available" repair, you are on it and nothing changes
