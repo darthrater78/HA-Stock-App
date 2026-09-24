@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -18,6 +18,9 @@ jobs:
   # place that checks both before anything gets built or published.
   gate:
     runs-on: ubuntu-latest
+    # Covers the CI wait loop's own 30-minute deadline plus checkout, so a
+    # hung API call cannot hold the job for GitHub's 360-minute default.
+    timeout-minutes: 35
     permissions:
       actions: read
       contents: read
@@ -46,12 +49,21 @@ jobs:
         run: |
           set -euo pipefail
           deadline=$(( $(date +%s) + 1800 ))
+          # A tag pushed seconds after the merge can arrive before GitHub has
+          # registered the merge's CI run, so an empty answer is retried for
+          # a short grace period before it counts as "never ran".
+          empty_deadline=$(( $(date +%s) + 90 ))
           while true; do
             runs=$(gh api \
               "repos/${REPO}/actions/workflows/ci.yml/runs?head_sha=${SHA}&per_page=100" \
               --jq '.workflow_runs[] | "\(.status) \(.conclusion) \(.html_url)"')
 
             if [ -z "$runs" ]; then
+              if [ "$(date +%s)" -lt "$empty_deadline" ]; then
+                echo "No CI run registered for ${SHA} yet -- waiting."
+                sleep 15
+                continue
+              fi
               echo "::error::CI has never run for ${SHA}, so nothing has tested this commit."
               echo "Push the branch so CI runs on it, or dispatch it by hand" >&2
               echo "(Actions -> CI -> Run workflow), then re-tag." >&2
@@ -82,10 +94,11 @@ jobs:
     needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
 
       - name: Verify tag matches the version in the tagged commit
@@ -150,6 +163,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --notes-file release-notes.md
