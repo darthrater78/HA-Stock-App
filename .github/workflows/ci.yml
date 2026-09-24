@@ -13,6 +13,12 @@ name: CI
 # Leaving push unfiltered means every commit that could be tagged always has a
 # run; PR churn is where the repeated runs were being spent anyway, so this
 # costs one run per merge.
+#
+# WARNING: the PR paths-ignore below is only safe while no branch protection
+# rule or ruleset makes these checks required (none does today). A required
+# check that a docs-only PR skips never reports, so that PR sits at "Expected --
+# waiting for status" and cannot merge. Remove paths-ignore before making any
+# job here a required check.
 on:
   push:
     branches: [main, master]

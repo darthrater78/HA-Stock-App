@@ -94,6 +94,15 @@ jobs:
     needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Publishing waits on the "release" environment's protection rules, which
+    # live in Settings -> Environments, not in this file: add yourself as a
+    # required reviewer and limit deployment tags to v*. Until those rules
+    # exist, GitHub creates the environment unprotected and this runs as before.
+    # The gate job stays outside it, so approval is only asked for a tag that
+    # has already passed every check.
+    environment:
+      name: release
+      url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}
     permissions:
       contents: write
     steps:
