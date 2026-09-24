@@ -1,5 +1,5 @@
 # Dev Skills gate state
-Track: release sequence
+Track: release sequence (v2.7.15 shipped)
 Mode: semi-autonomous (approved 2026-09-24) — commits and the tag still require the user's approval
 Origin: darthrater78/HA-Stock-App (not a fork)
 Standards: n/a — HA integration, no auth/Docker; at-rest: HA config entry storage (HA-managed); main-page links ✅
@@ -19,4 +19,5 @@ Updated: 2026-09-24
     Dependabot alerts setting: user to confirm (not queryable from here)
 📄 DOCS       ✅ v2.7.15 entry; schedule diagram corrected (EOD 16:05, 9:30 fetch)
 📦 RELEASE    ✅ commit approved 2026-09-24, release PR to master
-🚀 SHIP       ⏳ after merge: user verifies 9:30 fetch, then pushes v2.7.15 tag
+🚀 SHIP       ✅ v2.7.15 tagged at 9c18db2, release published 2026-09-24
+    First tag landed on 2c822c1 and was refused by the version check; user deleted it and re-tagged
