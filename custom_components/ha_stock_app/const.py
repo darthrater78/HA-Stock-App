@@ -108,6 +108,24 @@ def device_info(entry) -> dict:
     )
 
 
+def entry_device_id(hass, entry_id: str) -> str | None:
+    """Return the id of this config entry's device, or None if it isn't registered.
+
+    Home Assistant 2026.8 made device identifiers unique per config entry rather than
+    globally, and deprecated `async_get_device` (it stops working in 2027.8). Use the
+    per-entry lookup where it exists, and fall back on older versions.
+    """
+    from homeassistant.helpers import device_registry as dr
+
+    dev_reg = dr.async_get(hass)
+    identifier = (DOMAIN, entry_id)
+    if hasattr(dev_reg, "async_get_device_by_identifier"):
+        device = dev_reg.async_get_device_by_identifier(identifier, entry_id)
+    else:
+        device = dev_reg.async_get_device(identifiers={identifier})
+    return device.id if device else None
+
+
 def first_entity_id(hass, entry_id: str) -> str | None:
     from homeassistant.helpers import entity_registry as er
 

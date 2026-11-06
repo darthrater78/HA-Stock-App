@@ -6,7 +6,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
@@ -48,6 +48,7 @@ from .const import (
     EVENT_PAYCHECK_DETECTED,
     EVENT_MONARCH_STATUS,
     EVENT_CREDIT_CARD_CHANGE,
+    entry_device_id,
     first_entity_id,
 )
 from .providers import get_provider, StockQuote
@@ -116,9 +117,7 @@ class StockCoordinator(TimestampDataUpdateCoordinator):
     def device_id(self) -> str | None:
         if not self._entry_id:
             return None
-        dev_reg = dr.async_get(self.hass)
-        device = dev_reg.async_get_device(identifiers={(DOMAIN, self._entry_id)})
-        return device.id if device else None
+        return entry_device_id(self.hass, self._entry_id)
 
     @property
     def entity_id(self) -> str | None:
@@ -256,9 +255,7 @@ class MonarchCoordinator(DataUpdateCoordinator):
     def device_id(self) -> str | None:
         if not self._entry_id:
             return None
-        dev_reg = dr.async_get(self.hass)
-        device = dev_reg.async_get_device(identifiers={(DOMAIN, self._entry_id)})
-        return device.id if device else None
+        return entry_device_id(self.hass, self._entry_id)
 
     @property
     def entity_id(self) -> str | None:
