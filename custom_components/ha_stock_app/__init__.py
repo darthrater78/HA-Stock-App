@@ -61,6 +61,7 @@ from .const import (
     EVENT_MONARCH_STATUS,
     EVENT_PAYCHECK_DETECTED,
     EVENT_CREDIT_CARD_CHANGE,
+    entry_device_id,
     first_entity_id,
 )
 from .coordinator import StockCoordinator
@@ -124,7 +125,7 @@ async def _check_monarch_update(hass: HomeAssistant, entry_id: str) -> None:
     if issue_registry.async_get_issue(DOMAIN, issue_id):
         return
     try:
-        installed = pkg_version(MONARCH_PACKAGE)
+        installed = await hass.async_add_executor_job(pkg_version, MONARCH_PACKAGE)
     except Exception:
         return
     try:
@@ -403,10 +404,7 @@ class ScheduledFeatures:
 
     @property
     def _device_id(self) -> str | None:
-        from homeassistant.helpers import device_registry as dr
-        dev_reg = dr.async_get(self.hass)
-        device = dev_reg.async_get_device(identifiers={(DOMAIN, self._entry.entry_id)})
-        return device.id if device else None
+        return entry_device_id(self.hass, self._entry.entry_id)
 
     @property
     def _entity_id(self) -> str | None:

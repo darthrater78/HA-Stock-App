@@ -8,8 +8,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from homeassistant.helpers import device_registry as dr
-
 from .const import (
     CONF_401K_SENSOR,
     CONF_ENABLE_401K_REPORTING,
@@ -23,15 +21,14 @@ from .const import (
     EVENT_MONARCH_STATUS,
     EVENT_MONARCH_SYNC,
     device_info,
+    entry_device_id,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def _device_id(hass: HomeAssistant, entry: ConfigEntry) -> str | None:
-    dev_reg = dr.async_get(hass)
-    device = dev_reg.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
-    return device.id if device else None
+    return entry_device_id(hass, entry.entry_id)
 
 
 async def async_setup_entry(

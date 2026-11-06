@@ -121,7 +121,8 @@ class MonarchClient:
 
             if self._session_file and self._session_file.exists():
                 try:
-                    self._mm.load_session(str(self._session_file))
+                    # load_session reads a file; keep it off the event loop.
+                    await asyncio.to_thread(self._mm.load_session, str(self._session_file))
                     accounts = await self._mm.get_accounts()
                     if accounts:
                         _LOGGER.debug("Monarch Money: resumed saved session")

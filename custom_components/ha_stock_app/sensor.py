@@ -464,10 +464,19 @@ class MonarchPackageVersionSensor(SensorEntity):
         self._attr_unique_id = f"{DOMAIN}_monarch_package_version"
         self._attr_name = "Monarch Package Version"
         self._attr_device_info = device_info(entry)
+        self._attr_native_value = None
 
-    @property
-    def native_value(self) -> str | None:
-        try:
-            return pkg_version("monarchmoneycommunity")
-        except PackageNotFoundError:
-            return None
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        # Reading package metadata touches the disk, so do it once in the executor
+        # instead of on the event loop every time the state is written.
+        self._attr_native_value = await self.hass.async_add_executor_job(
+            _installed_version, "monarchmoneycommunity"
+        )
+
+
+def _installed_version(package: str) -> str | None:
+    try:
+        return pkg_version(package)
+    except PackageNotFoundError:
+        return None
